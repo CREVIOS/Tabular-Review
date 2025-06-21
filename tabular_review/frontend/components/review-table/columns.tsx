@@ -1,0 +1,331 @@
+"use client"
+
+import { ColumnDef } from "@tanstack/react-table"
+import { useCallback } from "react"
+import {
+  ArrowUpDown,
+  MoreHorizontal,
+  Eye,
+  FileText,
+  Loader2,
+  CheckCircle,
+  AlertCircle,
+  Download,
+} from "lucide-react"
+
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+
+import {
+  ReviewFile,
+  ReviewColumn,
+  ReviewResult,
+  RealTimeUpdates,
+} from "@/types"
+
+export type ReviewTableRow = {
+  file: ReviewFile
+  fileName: string
+  fileStatus: string
+  results: Record<string, ReviewResult | null>
+}
+
+/* ------------------------------------------------------------------ */
+/*  ✨ Re-usable column-header helper so every header is centered,
+    sortable, and optionally hideable.  */
+function CenteredHeader({
+  title,
+  column,
+}: {
+  title: React.ReactNode
+  column: any
+}) { 
+  const handleSort = useCallback(() => {
+    column.toggleSorting(column.getIsSorted() === "asc")
+  }, [column])
+
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="mx-auto flex items-center gap-1 text-center"
+      onClick={handleSort}
+    >
+      {title}
+      <ArrowUpDown className="h-3 w-3 opacity-60" />
+    </Button>
+  )
+}
+/* ------------------------------------------------------------------ */
+
+interface CreateColumnsProps {
+  columns: ReviewColumn[]
+  realTimeUpdates: RealTimeUpdates
+  processingCells: Set<string>
+  onCellClick: (fileId: string, columnId: string, result: ReviewResult) => void
+  onViewFile: (fileId: string) => void
+  isMobile?: boolean
+}
+
+export function createColumns({
+  columns,
+  realTimeUpdates,
+  processingCells,
+  onCellClick,
+  onViewFile,
+  isMobile = false,
+}: CreateColumnsProps): ColumnDef<ReviewTableRow>[] {
+  /* ─────────────────────────────  static columns  ─────────────────────────── */
+  const baseColumns: ColumnDef<ReviewTableRow>[] = [
+    {
+      accessorKey: "fileName",
+      header: ({ column }) => (
+        <CenteredHeader
+          title={
+            <>
+              <FileText className="mr-1 h-4 w-4 text-blue-600" />
+              Document
+            </>
+          }
+          column={column}
+        />
+      ),
+      cell: ({ row }) => {
+        const { file } = row.original
+        return (
+          <div className="flex items-center gap-3">
+            <div className="w-1.5 h-8 rounded bg-gradient-to-b from-blue-500 to-blue-600" />
+            <div className="min-w-0 space-y-0.5">
+              <p
+                className="truncate text-sm font-medium text-gray-900 max-w-[16rem]"
+                title={row.original.fileName}
+              >
+                {row.original.fileName}
+              </p>
+              <div className="flex items-center gap-2">
+                <Badge
+                  variant={
+                    file.status === "completed"
+                      ? "default"
+                      : file.status === "processing"
+                      ? "secondary"
+                      : "outline"
+                  }
+                  className="px-1.5 py-0.5 text-[10px]"
+                >
+                  {file.status === "completed"
+                    ? "Ready"
+                    : file.status === "processing"
+                    ? "Processing"
+                    : "Pending"}
+                </Badge>
+                {file.file_size && (
+                  <span className="text-[10px] text-muted-foreground">
+                    {formatFileSize(file.file_size)}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      },
+      size: 320,
+      minSize: 280,
+      maxSize: 450,
+      meta: { 
+        className: "sticky-column",
+        isSticky: true 
+      },
+    },
+    {
+      id: "actions",
+      header: () => <div className="text-center w-full" />, // keeps spacing
+      enableSorting: false,
+      size: 60,
+      cell: ({ row }) => {
+        const handleViewFile = useCallback(() => {
+          onViewFile(row.original.file.file_id)
+        }, [row.original.file.file_id])
+
+        const handleCopyId = useCallback(() => {
+          navigator.clipboard.writeText(row.original.file.file_id)
+        }, [row.original.file.file_id])
+
+        return (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="h-8 w-8 p-0 mx-auto">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuLabel>File actions</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleViewFile}>
+                <Eye className="mr-2 h-4 w-4" />
+                View document
+              </DropdownMenuItem>
+              <DropdownMenuItem>
+                <Download className="mr-2 h-4 w-4" />
+                Download
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleCopyId}>
+                Copy file ID
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )
+      },
+    },
+  ]
+
+  /* ─────────────────────────────  dynamic columns  ────────────────────────── */
+  const dynamicColumns: ColumnDef<ReviewTableRow>[] = columns.map(
+    (col, idx) => ({
+      id: col.id,
+      accessorKey: `results.${col.id}`,
+      header: ({ column }) => (
+        <CenteredHeader
+          title={
+            <div className="flex flex-col items-center">
+              <span className="truncate max-w-[8rem] font-medium">{col.column_name}</span>
+              <span className="text-[10px] text-muted-foreground truncate max-w-[8rem]">
+                {col.prompt}
+              </span>
+            </div>
+          }
+          column={column}
+        />
+      ),
+      meta: { className: "w-48" },
+      size: 192,
+      minSize: 160,
+      cell: ({ row }) => {
+        const file   = row.original.file
+        const key    = `${file.file_id}-${col.id}`
+        const live   = realTimeUpdates[key]
+        const stored = row.original.results[col.id]
+        const res    = live || stored
+        const spinning   = processingCells.has(key)
+        const updated    = live && live.timestamp && Date.now() - live.timestamp < 1500
+
+        const handleCellClick = useCallback(() => {
+          if (res) {
+            onCellClick(file.file_id, col.id, res as ReviewResult)
+          }
+        }, [file.file_id, col.id, res])
+      
+        /* ---- states ---- */
+        if (spinning)
+          return (
+            <CenteredBox>
+              <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+              <span className="text-[11px] text-blue-600">Analyzing…</span>
+            </CenteredBox>
+          )
+      
+        if (res?.error)
+          return (
+            <CenteredBox>
+              <AlertCircle className="h-4 w-4 text-red-500" />
+              <span className="text-[11px] text-red-600">Failed</span>
+            </CenteredBox>
+          )
+      
+        if (!res?.extracted_value)
+          return (
+            <CenteredBox>
+              <span className="text-[11px] text-muted-foreground">No data</span>
+            </CenteredBox>
+          )
+      
+        /* ---- success ---- */
+        console.log('✅ Rendering data for:', key, res.extracted_value)
+        const confidence = Math.round((res.confidence_score || 0) * 100)
+        
+        // **NEW: Truncate text to ~7 words**
+        const fullText = res.extracted_value || ''
+        const words = fullText.split(' ')
+        const shouldTruncate = words.length > 7
+        const displayText = shouldTruncate 
+          ? words.slice(0, 7).join(' ') + '...'
+          : fullText
+      
+       
+        if (process.env.NODE_ENV === 'development' && Math.random() < 0.02) { // Only log 2% to reduce spam
+            console.log('🎨 Cell Render Debug:', {
+              cellKey: key,
+              fileName: row.original.fileName.substring(0, 20) + '...',
+              columnName: col.column_name,
+              spinning,
+              hasRes: !!res,
+              extractedValue: res?.extracted_value?.substring(0, 30) + '...',
+              state: spinning ? 'SPINNING' : res?.error ? 'ERROR' : (!res || !res.extracted_value) ? 'WAITING' : 'DATA'
+            })
+          }
+      
+        return (
+          <div
+            className={`group relative w-full rounded border border-transparent p-3 hover:border-blue-200 hover:bg-muted/30 transition-all duration-200 cursor-pointer
+                        ${updated ? "border-green-300 bg-green-50 shadow-sm" : ""}`}
+            onClick={handleCellClick}
+            title={`${fullText}\nConfidence: ${confidence}%${
+              res.source_reference ? `\nSource: ${res.source_reference}` : ""
+            }`}
+          >
+            {/* **DEBUG: Visual state indicator** */}
+            {process.env.NODE_ENV === 'development' && (
+              <div className="absolute top-1 right-1 bg-green-600 text-white text-[8px] px-1 py-0.5 rounded z-20">
+                DATA
+              </div>
+            )}
+            
+            {/* **SIMPLIFIED: Just show truncated text - all details in native tooltip** */}
+            <div className="text-[13px] leading-relaxed text-left w-full min-h-[20px]">
+              <div className="truncate">
+                {displayText}
+              </div>
+            </div>
+          </div>
+        )
+      },
+      
+      sortingFn: (a, b) =>
+        (a.original.results[col.id]?.extracted_value || "").localeCompare(
+          b.original.results[col.id]?.extracted_value || ""
+        ),
+      filterFn: (row, _, value) =>
+        (row.original.results[col.id]?.extracted_value || "")
+          .toLowerCase()
+          .includes(value.toLowerCase()),
+    })
+  )
+
+  /* final order: [Document | dynamic cols | Actions] */
+  return [...baseColumns.slice(0, 1), ...dynamicColumns, baseColumns[1]]
+}
+
+/* helper small bits  -------------------------------------------------------- */
+function CenteredBox({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex min-h-[70px] flex-col items-center justify-center gap-2 text-center p-2 rounded border border-gray-100 bg-gray-50/30">
+      {children}
+    </div>
+  )
+}
+
+function formatFileSize(bytes: number) {
+  if (!bytes) return "0 B"
+  const u = ["B", "KB", "MB", "GB", "TB"]
+  const i = Math.floor(Math.log(bytes) / Math.log(1024))
+  return `${(bytes / 1024 ** i).toFixed(1)} ${u[i]}`
+}
