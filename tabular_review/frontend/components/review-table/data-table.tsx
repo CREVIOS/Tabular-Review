@@ -14,7 +14,7 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table"
-import { ChevronDown, Search, Plus, Play, Settings2, Filter, Download } from "lucide-react"
+import { ChevronDown, Search, Plus, Play, Settings2, Download } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -35,7 +35,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { ReviewTableRow } from "./columns"
 
 interface DataTableProps {
@@ -53,6 +53,10 @@ interface DataTableProps {
   isMobile?: boolean
 }
 
+interface ColumnMeta {
+  isSticky?: boolean;
+}
+
 export function DataTable({
   columns,
   data,
@@ -65,7 +69,6 @@ export function DataTable({
   totalColumns,
   completionPercentage,
   reviewColumns,
-  isMobile = false
 }: DataTableProps) {
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -119,7 +122,7 @@ export function DataTable({
       const wb = XLSX.utils.book_new()
       
       // === MAIN DATA SHEET ===
-      const exportData: any[] = []
+      const exportData: (string | number | null)[][] = []
       
       // Add header row with proper column names
       const headers = ['Document']
@@ -145,7 +148,7 @@ export function DataTable({
       
       // Add data rows
       filteredData.forEach(row => {
-        const exportRow: any[] = []
+        const exportRow: (string | number | null)[] = []
         
         columnOrder.forEach(columnId => {
           if (columnId === 'fileName') {
@@ -386,7 +389,7 @@ export function DataTable({
                             minWidth: header.column.columnDef.minSize || 'auto'
                           }}
                           className={`h-auto px-4 py-3 text-center font-semibold text-gray-900 border-r border-gray-200 last:border-r-0 bg-gray-50/80 backdrop-blur-sm ${
-                            (header.column.columnDef.meta as any)?.isSticky 
+                            (header.column.columnDef.meta as ColumnMeta)?.isSticky 
                               ? 'sticky-column-header' 
                               : ''
                           }`}>
@@ -421,7 +424,7 @@ export function DataTable({
                             maxWidth: cell.column.getSize()
                           }}
                           className={`px-3 py-4 align-top text-center border-r border-gray-100 last:border-r-0 overflow-hidden ${
-                            (cell.column.columnDef.meta as any)?.isSticky 
+                            (cell.column.columnDef.meta as ColumnMeta)?.isSticky 
                               ? 'sticky-column-cell' 
                               : ''
                           }`}

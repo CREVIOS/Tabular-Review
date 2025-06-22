@@ -72,9 +72,9 @@ export function FilesTable({ refreshTrigger }: FilesTableProps) {
       } else {
         throw new Error('Invalid response format')
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to fetch files:', error)
-      const errorMessage = error.message || 'Failed to fetch files'
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch files'
       setError(errorMessage)
       
       // If this is an automatic retry, don't show the error immediately
@@ -162,9 +162,9 @@ export function FilesTable({ refreshTrigger }: FilesTableProps) {
         `)
         newWindow.document.close()
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to fetch markdown:', error)
-      const errorMessage = error.message || 'Failed to fetch markdown'
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch markdown'
       alert(`Failed to view document: ${errorMessage}`)
     }
   }

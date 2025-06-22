@@ -99,7 +99,7 @@ export function LoginForm() {
       // Reset attempt count on successful login
       setAttemptCount(0)
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Login error:", error)
       
       // Increment attempt count
@@ -109,12 +109,14 @@ export function LoginForm() {
       setError(errorMessage)
       
       // Add specific handling for common login errors
-      if (error.message?.includes('Invalid credentials')) {
-        setError("Invalid email or password. Please check your credentials and try again.")
-      } else if (error.message?.includes('Account locked')) {
-        setError("Your account has been temporarily locked due to multiple failed login attempts.")
-      } else if (error.message?.includes('Email not verified')) {
-        setError("Please verify your email address before logging in.")
+      if (error instanceof Error) {
+        if (error.message?.includes('Invalid credentials')) {
+          setError("Invalid email or password. Please check your credentials and try again.")
+        } else if (error.message?.includes('Account locked')) {
+          setError("Your account has been temporarily locked due to multiple failed login attempts.")
+        } else if (error.message?.includes('Email not verified')) {
+          setError("Please verify your email address before logging in.")
+        }
       }
     } finally {
       setIsSubmitting(false)
@@ -303,7 +305,7 @@ export function LoginForm() {
       {/* Register Link */}
       <div className="text-center pt-4 border-t border-gray-200">
         <p className="text-sm text-gray-600">
-          Don't have an account?{" "}
+          Don&apos;t have an account?{" "}
           <Link 
             href="/register" 
             className="text-blue-600 hover:text-blue-700 font-medium hover:underline"

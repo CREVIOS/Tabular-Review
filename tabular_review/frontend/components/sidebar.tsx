@@ -23,6 +23,8 @@ import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { auth } from "@/lib/api"
 import { Badge } from "@/components/ui/badge"
+import { FileResponse, TabularReviewResponse }  from "@/types/index"
+import {User as user} from "@/types/types"
 
 const sidebarItems = [
   {
@@ -171,7 +173,7 @@ export function Sidebar({ className }: SidebarProps) {
   const router = useRouter()
   const pathname = usePathname()
   const { isCollapsed, isMobileOpen, toggleCollapsed, closeMobile } = useSidebar()
-  const [currentUser, setCurrentUser] = React.useState<any>(null)
+  const [currentUser, setCurrentUser] = React.useState<user | null>(null)
   const [stats, setStats] = React.useState({
     activeReviews: 0,
     processingFiles: 0
@@ -207,8 +209,8 @@ export function Sidebar({ className }: SidebarProps) {
         ])
 
         const reviews = Array.isArray(reviewsData.reviews) ? reviewsData.reviews : (Array.isArray(reviewsData) ? reviewsData : [])
-        const activeReviews = reviews.filter((r: any) => r.status === 'processing').length
-        const processingFiles = filesData.filter((f: any) => f.status === 'processing' || f.status === 'queued').length
+        const activeReviews = reviews.filter((r: TabularReviewResponse) => r.status === 'processing').length
+        const processingFiles = filesData.filter((f: FileResponse) => f.status === 'processing' || f.status === 'queued').length
 
         setStats({ activeReviews, processingFiles })
       }

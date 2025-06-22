@@ -117,3 +117,55 @@ export interface ReviewTableRow {
   fileStatus: string;
   results: Record<string, ReviewResult | null>;
 }
+
+  export interface TabularReviewResponse {
+    id: string
+    user_id: string
+    name: string
+    description?: string
+    status: string
+    review_scope: string
+    folder_id?: string
+    created_at: string
+    updated_at: string
+    last_processed_at?: string
+    columns: Array<TabularReviewColumnResponse>
+    files: Array<TabularReviewFileResponse>
+    total_files: number
+    total_columns: number
+    completion_percentage: number
+  }
+
+  interface TabularReviewColumnResponse {
+    id: string
+    column_name: string
+    prompt: string
+    column_order: number
+    data_type: string
+    created_at: string
+  }
+
+  interface TabularReviewFileResponse {
+    id: string
+    file_id: string
+    filename: string
+    file_size?: number
+    status: string
+    added_at: string
+  }
+  
+
+  export interface FileResponse {
+    id: string
+    user_id: string
+    original_filename: string
+    file_size?: number
+    file_type?: string
+    storage_path?: string
+    storage_url?: string
+    status: string
+    created_at: string
+    updated_at: string
+    processed_at?: string
+    error_message?: string
+  }

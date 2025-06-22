@@ -167,7 +167,7 @@ export default function UploadPage() {
         <input
           ref={folderInputRef}
           type="file"
-          /* @ts-ignore */
+          /* @ts-expect-error reason*/
           webkitdirectory=""
           directory=""
           multiple

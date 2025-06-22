@@ -20,9 +20,7 @@ import { Badge } from '@/components/ui/badge'
 
 // Optimized hooks with caching
 import { 
-  useReviewsWithFiles,
-  useStartAnalysis 
-} from '../../hooks/useOptimizedApi'
+  useReviewsWithFiles} from '../../hooks/useOptimizedApi'
 
 // Store - using individual hooks for better performance
 import {
@@ -32,7 +30,6 @@ import {
   useSelectedFiles,
   useSetSelectedFiles,
   useSetError,
-  useStoreError
 } from '../../store/useRealtimeStore'
 
 // Components
@@ -49,14 +46,16 @@ export default function TabularReviewPage() {
   
   // Get folder context from URL parameters
   const folderId = searchParams.get('folderId')
-  const fileIds = searchParams.get('fileIds')?.split(',').filter(Boolean) || []
+  const fileIds = useMemo(() => {
+  return searchParams.get('fileIds')?.split(',').filter(Boolean) || [];
+}, [searchParams]);
   
   // Store state - using individual hooks for better performance
   const reviews = useReviews()
   const selectedFiles = useSelectedFiles()
   const setSelectedFiles = useSetSelectedFiles()
   const setError = useSetError()
-  const error = useStoreError()
+  // const error = useStoreError()
   const setReviews = useSetReviews()
   const setFiles = useSetFiles()
   
@@ -74,7 +73,7 @@ export default function TabularReviewPage() {
     error: apiError
   } = useReviewsWithFiles()
   
-  const startAnalysisMutation = useStartAnalysis()
+  // const startAnalysisMutation = useStartAnalysis()
 
   // Initialize store with data
   useEffect(() => {
@@ -165,23 +164,23 @@ export default function TabularReviewPage() {
   }, [tableData, searchQuery, statusFilter])
 
   // Calculate stats
-  const stats = useMemo(() => {
-    const total = reviews.length
-    const completed = reviews.filter(r => r.status === 'completed').length
-    const processing = reviews.filter(r => r.status === 'processing').length
-    const failed = reviews.filter(r => r.status === 'failed').length
-    const totalFiles = reviews.reduce((sum, r) => sum + (r.total_files || 0), 0)
-    const avgCompletion = total > 0 ? reviews.reduce((sum, r) => sum + (r.completion_percentage || 0), 0) / total : 0
+  //   const stats = useMemo(() => {
+  //   const total = reviews.length
+  //   const completed = reviews.filter(r => r.status === 'completed').length
+  //   const processing = reviews.filter(r => r.status === 'processing').length
+  //   const failed = reviews.filter(r => r.status === 'failed').length
+  //   const totalFiles = reviews.reduce((sum, r) => sum + (r.total_files || 0), 0)
+  //   const avgCompletion = total > 0 ? reviews.reduce((sum, r) => sum + (r.completion_percentage || 0), 0) / total : 0
     
-    return {
-      total,
-      completed,
-      processing,
-      failed,
-      totalFiles,
-      avgCompletion: Math.round(avgCompletion)
-    }
-  }, [reviews])
+  //   return {
+  //     total,
+  //     completed,
+  //     processing,
+  //     failed,
+  //     totalFiles,
+  //     avgCompletion: Math.round(avgCompletion)
+  //   }
+  // }, [reviews])
 
   // Create columns with handlers
   const columns = useMemo(() => {
@@ -199,19 +198,19 @@ export default function TabularReviewPage() {
     router.push(`/review/${reviewId}`)         
   }
 
-  const handleQuickAction = (action: string) => {
-    switch (action) {
-      case 'create':
-        setIsCreatingReview(true)
-        break
-      case 'templates':
-        // Navigate to templates
-        break
-      case 'analytics':
-        // Navigate to analytics
-        break
-    }
-  }
+  // const handleQuickAction = (action: string) => {
+  //   switch (action) {
+  //     case 'create':
+  //       setIsCreatingReview(true)
+  //       break
+  //     case 'templates':
+  //       // Navigate to templates
+  //       break
+  //     case 'analytics':
+  //       // Navigate to analytics
+  //       break
+  //   }
+  // }
 
   if (isLoading && !reviewsWithFiles) {
     return (
