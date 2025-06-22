@@ -11,10 +11,8 @@ import {
   FileText,
   Target,
   Wand2,
-  FolderOpen,
-  Trash2,
   Search,
-  Eye
+  Trash2
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -25,7 +23,6 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Checkbox } from '@/components/ui/checkbox'
 
 interface Folder {
   id: string
@@ -309,9 +306,9 @@ export default function EnhancedCreateReview({
       
       onSuccess(result.id)
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to create review:', error)
-      setError(error.message || 'Failed to create review')
+      setError(error instanceof Error ? error.message : 'Failed to create review')
     } finally {
       setLoading(false)
     }

@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { subscribeWithSelector } from 'zustand/middleware'
 import { useMemo } from 'react'
 import { Review, File, RealTimeUpdates } from '../types'
+import { produce } from 'immer'
 
 interface RealtimeState {
   // Data
@@ -19,6 +20,7 @@ interface RealtimeState {
   
   // SSE Connection
   sseConnection: EventSource | null
+  connectedReviewId: string | null
   connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error'
   
   // Actions
@@ -29,6 +31,7 @@ interface RealtimeState {
   addProcessingCell: (cellId: string) => void
   removeProcessingCell: (cellId: string) => void
   setRealTimeUpdate: (key: string, value: any) => void
+  clearProcessingCells: () => void
   
   // File selection
   toggleFileSelection: (fileId: string) => void
@@ -65,6 +68,7 @@ export const useRealtimeStore = create<RealtimeState>()(
     error: null,
     
     sseConnection: null,
+    connectedReviewId: null,
     connectionStatus: 'disconnected',
     
     // Data actions
@@ -109,9 +113,15 @@ export const useRealtimeStore = create<RealtimeState>()(
       return { processingCells: newSet }
     }),
     
-    setRealTimeUpdate: (key, value) => set((state) => ({
-      realTimeUpdates: { ...state.realTimeUpdates, [key]: value }
-    })),
+    clearProcessingCells: () => set({ processingCells: new Set() }),
+    
+    setRealTimeUpdate: (key, value) =>
+      set(
+        produce((draft: RealtimeState) => {
+         
+          draft.realTimeUpdates[key] = { ...value }
+        })
+      ),
     
     // File selection
     toggleFileSelection: (fileId) => set((state) => ({
@@ -122,8 +132,14 @@ export const useRealtimeStore = create<RealtimeState>()(
     
     clearFileSelection: () => set({ selectedFiles: [] }),
     
-    setSelectedFiles: (fileIds) => set({ selectedFiles: fileIds }),
-    
+    setSelectedFiles: (fileIds) =>
+      set((state) => {
+        const same =
+          state.selectedFiles.length === fileIds.length &&
+          state.selectedFiles.every((id, i) => id === fileIds[i])
+        return same ? state               // ← no state change ⇒ no re-render
+                    : { selectedFiles: fileIds }
+      }),    
     // UI actions
     setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
     setSelectedReview: (review) => set({ selectedReview: review }),
@@ -131,7 +147,17 @@ export const useRealtimeStore = create<RealtimeState>()(
     setError: (error) => set({ error }),
     
     connectSSE: (reviewId) => {
-      const { sseConnection } = get()
+      const { sseConnection, connectedReviewId, connectionStatus } = get()
+      
+      // If we are already connected to this review and the connection is healthy, do nothing
+      if (
+        sseConnection &&
+        connectedReviewId === reviewId &&
+        connectionStatus === 'connected' &&
+        sseConnection.readyState === 1 /* OPEN */
+      ) {
+        return
+      }
       
       // Close existing connection
       if (sseConnection) {
@@ -159,7 +185,7 @@ export const useRealtimeStore = create<RealtimeState>()(
         eventSource.onopen = () => {
           console.log('✅ SSE connection opened for review:', reviewId)
           console.log('🔗 Connection readyState:', eventSource.readyState)
-          set({ connectionStatus: 'connected', sseConnection: eventSource, error: null })
+          set({ connectionStatus: 'connected', sseConnection: eventSource, connectedReviewId: reviewId, error: null })
         }
         
         eventSource.onmessage = (event) => {
@@ -204,6 +230,7 @@ export const useRealtimeStore = create<RealtimeState>()(
                   confidence_score: data.result?.confidence_score ?? undefined,
                   source_reference: data.result?.source_reference ?? '',
                   status: 'completed',
+                  replayed: data.replayed || false,
                   timestamp: Date.now() // Add timestamp for UI animations
                 })
                 
@@ -262,8 +289,17 @@ export const useRealtimeStore = create<RealtimeState>()(
                 
               case 'column_analysis_completed':
                 console.log('✅ Column analysis completed:', data.column_id, data.message)
-                // Column analysis completed - this is just a notification
-                // The individual cell completions have already been handled above
+                // Clear any remaining processing cells for this column
+                if (data.column_id) {
+                  const currentState = get()
+                  const cellsToRemove = Array.from(currentState.processingCells).filter(cellKey => 
+                    cellKey.endsWith(`-${data.column_id}`)
+                  )
+                  cellsToRemove.forEach(cellKey => {
+                    console.log('🧹 Clearing stale processing cell:', cellKey)
+                    removeProcessingCell(cellKey)
+                  })
+                }
                 break
                 
               case 'files_analysis_started':
@@ -376,7 +412,7 @@ export const useRealtimeStore = create<RealtimeState>()(
       const { sseConnection } = get()
       if (sseConnection) {
         sseConnection.close()
-        set({ sseConnection: null, connectionStatus: 'disconnected' })
+        set({ sseConnection: null, connectedReviewId: null, connectionStatus: 'disconnected' })
       }
     },
     
@@ -492,3 +528,5 @@ export const useUIActions = () => {
     setError,
   }), [setSidebarCollapsed, setLoading, setError])
 }
+
+export const useClearProcessingCells = () => useRealtimeStore((state) => state.clearProcessingCells)

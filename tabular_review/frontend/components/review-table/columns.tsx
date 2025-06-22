@@ -8,7 +8,6 @@ import {
   Eye,
   FileText,
   Loader2,
-  CheckCircle,
   AlertCircle,
   Download,
 } from "lucide-react"
@@ -23,7 +22,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-
 import {
   ReviewFile,
   ReviewColumn,
@@ -151,13 +149,9 @@ export function createColumns({
       enableSorting: false,
       size: 60,
       cell: ({ row }) => {
-        const handleViewFile = useCallback(() => {
-          onViewFile(row.original.file.file_id)
-        }, [row.original.file.file_id])
-
-        const handleCopyId = useCallback(() => {
-          navigator.clipboard.writeText(row.original.file.file_id)
-        }, [row.original.file.file_id])
+        const fileId = row.original.file.file_id
+        const handleViewFile = () => onViewFile(fileId)
+        const handleCopyId = () => navigator.clipboard.writeText(fileId)
 
         return (
           <DropdownMenu>
@@ -212,17 +206,17 @@ export function createColumns({
       cell: ({ row }) => {
         const file   = row.original.file
         const key    = `${file.file_id}-${col.id}`
-        const live   = realTimeUpdates[key]
         const stored = row.original.results[col.id]
+        const live    = realTimeUpdates[key]
+        const spinning = processingCells.has(key)
         const res    = live || stored
-        const spinning   = processingCells.has(key)
         const updated    = live && live.timestamp && Date.now() - live.timestamp < 1500
 
-        const handleCellClick = useCallback(() => {
+        const handleCellClick = () => {
           if (res) {
             onCellClick(file.file_id, col.id, res as ReviewResult)
           }
-        }, [file.file_id, col.id, res])
+        }
       
         /* ---- states ---- */
         if (spinning)

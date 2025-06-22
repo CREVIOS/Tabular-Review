@@ -114,7 +114,6 @@ export default function RootLayout({
             base-uri 'self';
             form-action 'self';
             frame-ancestors 'none';
-            upgrade-insecure-requests;
           `.replace(/\s+/g, ' ').trim()
         }
         />

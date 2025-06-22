@@ -3,9 +3,7 @@
 import * as React from "react"
 import {
   BarChart3,
-  Files,
   Upload,
-  Settings,
   LogOut,
   User,
   Sparkles,
@@ -14,8 +12,6 @@ import {
   FolderOpen,
   Plus,
   Activity,
-  FileText,
-  Clock,
   Menu,
   X,
   ChevronLeft,

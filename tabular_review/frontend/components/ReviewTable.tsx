@@ -104,36 +104,33 @@ export const ReviewTable: React.FC<ReviewTableProps> = ({
   // **FIX: Add fallback processing cells for newly created reviews**
   const enhancedProcessingCells = useMemo(() => {
     const enhanced = new Set(processingCells)
-    
+
     // If review is processing and was created recently (within 60 seconds)
     if (review.status === 'processing' && review.created_at) {
       const createdAt = new Date(review.created_at)
       const now = new Date()
       const secondsAgo = (now.getTime() - createdAt.getTime()) / 1000
-      
-      console.log('🕒 Review age:', secondsAgo, 'seconds')
-      
+
       if (secondsAgo < 60) {
-        console.log('🎯 Adding fallback processing cells for new review')
         // Add cells that don't have results yet as processing
         review.files?.forEach(file => {
           review.columns?.forEach(column => {
             const cellKey = `${file.file_id}-${column.id}`
             const hasResult = review.results?.some(r => r.file_id === file.file_id && r.column_id === column.id)
             const hasRealtimeUpdate = realTimeUpdates[cellKey]
+            const isAlreadyProcessing = processingCells.has(cellKey)
             
-            if (!hasResult && !hasRealtimeUpdate) {
+            if (!hasResult && !hasRealtimeUpdate && !isAlreadyProcessing) {
               enhanced.add(cellKey)
               console.log('➕ Added fallback processing cell:', cellKey)
             }
           })
         })
-        console.log('📊 Total enhanced processing cells:', enhanced.size)
       }
     }
-    
+
     return enhanced
-  }, [processingCells, review, realTimeUpdates])
+  }, [processingCells, review.files, review.columns, review.status, review.created_at, review.results, realTimeUpdates])
 
   // Create columns with callbacks - memoize to prevent infinite re-renders
   const columns = useMemo(() => {

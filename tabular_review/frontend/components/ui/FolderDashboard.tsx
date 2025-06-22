@@ -107,9 +107,9 @@ export default function FolderDashboard({ onFolderSelect, selectedFolderId }: Fo
 
       const data = await response.json()
       setFolders(data)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to fetch folders:', error)
-      setError(error.message || 'Failed to fetch folders')
+      setError(error instanceof Error ? error.message : 'Failed to fetch folders')
     } finally {
       setLoading(false)
     }
@@ -149,8 +149,9 @@ export default function FolderDashboard({ onFolderSelect, selectedFolderId }: Fo
       setNewFolderColor('#3b82f6')
       setIsCreateDialogOpen(false)
       
-    } catch (error: any) {
-      setError(error.message || 'Failed to create folder')
+    } catch (error: unknown) {
+      console.error('Failed to create folder:', error)
+      setError(error instanceof Error ? error.message : 'Failed to create folder')
     } finally {
       setIsCreating(false)
     }
@@ -187,8 +188,9 @@ export default function FolderDashboard({ onFolderSelect, selectedFolderId }: Fo
       setEditingFolder(null)
       setIsEditDialogOpen(false)
       
-    } catch (error: any) {
-      setError(error.message || 'Failed to update folder')
+    } catch (error: unknown) {
+      console.error('Failed to update folder:', error)
+      setError(error instanceof Error ? error.message : 'Failed to update folder')
     } finally {
       setIsUpdating(false)
     }
@@ -222,8 +224,9 @@ export default function FolderDashboard({ onFolderSelect, selectedFolderId }: Fo
         onFolderSelect(null)
       }
       
-    } catch (error: any) {
-      setError(error.message || 'Failed to delete folder')
+    } catch (error: unknown) {
+      console.error('Failed to delete folder:', error)
+      setError(error instanceof Error ? error.message : 'Failed to delete folder')
     }
   }
 

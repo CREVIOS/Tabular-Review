@@ -153,7 +153,7 @@ export function RegisterForm() {
       )
 
       // Registration successful - the auth context will handle redirect
-    } catch (error: any) {
+    } catch (error: Error | unknown) {
       console.error("Registration error:", error)
       const errorMessage = handleApiError(error)
       setError(errorMessage)

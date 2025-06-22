@@ -1,9 +1,9 @@
 // app/upload/page.tsx
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useRef } from "react"
 import { useDropzone } from "react-dropzone"
-import { Upload, File, X, CheckCircle, AlertCircle, Clock, CloudUpload, Sparkles } from "lucide-react"
+import { Upload, File, X, CheckCircle, AlertCircle, Clock, CloudUpload, Sparkles, FolderOpen, FileStack } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { files as fileApi } from "@/lib/api"
@@ -19,6 +19,8 @@ interface UploadFile {
 export default function UploadPage() {
   const [files, setFiles] = useState<UploadFile[]>([])
   const [isUploading, setIsUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const folderInputRef = useRef<HTMLInputElement>(null)
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const newFiles: UploadFile[] = acceptedFiles.map((file) => ({
@@ -35,9 +37,40 @@ export default function UploadPage() {
     onDrop,
     accept: {
       'application/pdf': ['.pdf'],
+      'application/msword': ['.doc'],
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+      'text/plain': ['.txt'],
+      'application/vnd.ms-excel': ['.xls'],
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx']
     },
     multiple: true,
   })
+
+  const handleFileSelect = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click()
+    }
+  }
+
+  const handleFolderSelect = () => {
+    if (folderInputRef.current) {
+      folderInputRef.current.click()
+    }
+  }
+
+  const handleFileInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = Array.from(event.target.files || [])
+    if (selectedFiles.length > 0) {
+      onDrop(selectedFiles)
+    }
+  }
+
+  const handleFolderInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = Array.from(event.target.files || [])
+    if (selectedFiles.length > 0) {
+      onDrop(selectedFiles)
+    }
+  }
 
   const removeFile = (id: string) => {
     setFiles((prev) => prev.filter((file) => file.id !== id))
@@ -118,9 +151,29 @@ export default function UploadPage() {
             <h1 className="text-4xl font-bold text-gray-900">Upload Documents</h1>
           </div>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-            Upload PDF documents to start your AI-powered analysis
+            Upload multiple files or entire folders to start your AI-powered analysis
           </p>
         </div>
+
+        {/* Hidden file inputs */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept=".pdf,.doc,.docx,.txt,.xls,.xlsx"
+          onChange={handleFileInputChange}
+          className="hidden"
+        />
+        <input
+          ref={folderInputRef}
+          type="file"
+          /* @ts-ignore */
+          webkitdirectory=""
+          directory=""
+          multiple
+          onChange={handleFolderInputChange}
+          className="hidden"
+        />
 
         {/* Main Upload Area */}
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 overflow-hidden">
@@ -152,18 +205,38 @@ export default function UploadPage() {
                 ) : (
                   <div>
                     <p className="text-2xl font-semibold text-gray-900 mb-2">
-                      Drag & drop your PDF files
+                      Drag & drop files or folders
                     </p>
                     <p className="text-gray-600 mb-6">
-                      or click to browse and select files
+                      or choose from the options below
                     </p>
-                    <Button 
-                      variant="outline" 
-                      className="bg-white border-2 border-blue-300 text-blue-700 hover:bg-blue-50 px-8 py-3"
-                    >
-                      <File className="h-5 w-5 mr-2" />
-                      Select Files
-                    </Button>
+                    
+                    {/* Upload Options */}
+                    <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                      <Button 
+                        variant="outline" 
+                        className="bg-white border-2 border-blue-300 text-blue-700 hover:bg-blue-50 px-6 py-3"
+                        onClick={handleFileSelect}
+                      >
+                        <FileStack className="h-5 w-5 mr-2" />
+                        Select Multiple Files
+                      </Button>
+                      
+                      <Button 
+                        variant="outline" 
+                        className="bg-white border-2 border-green-300 text-green-700 hover:bg-green-50 px-6 py-3"
+                        onClick={handleFolderSelect}
+                      >
+                        <FolderOpen className="h-5 w-5 mr-2" />
+                        Select Entire Folder
+                      </Button>
+                    </div>
+                    
+                    <div className="mt-4 text-sm text-gray-500">
+                      <p className="mb-1">✓ Multiple files at once</p>
+                      <p className="mb-1">✓ Entire folder with subfolders</p>
+                      <p>✓ Drag & drop from your file manager</p>
+                    </div>
                   </div>
                 )}
               </div>
@@ -300,7 +373,7 @@ export default function UploadPage() {
         {/* Instructions */}
         <div className="mt-8 text-center">
           <p className="text-gray-600 mb-4">
-            Supported format: PDF files only • Maximum size: 10MB per file
+            Supported formats: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), Text (.txt) • Maximum size: 50MB per file
           </p>
           <div className="flex items-center justify-center gap-6 text-sm text-gray-500">
             <div className="flex items-center gap-2">
@@ -309,7 +382,11 @@ export default function UploadPage() {
             </div>
             <div className="flex items-center gap-2">
               <CheckCircle className="h-4 w-4 text-green-500" />
-              <span>Fast Processing</span>
+              <span>Bulk Upload</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <CheckCircle className="h-4 w-4 text-green-500" />
+              <span>Folder Support</span>
             </div>
             <div className="flex items-center gap-2">
               <CheckCircle className="h-4 w-4 text-green-500" />
