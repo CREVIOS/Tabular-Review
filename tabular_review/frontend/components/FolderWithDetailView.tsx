@@ -98,9 +98,9 @@ export default function FolderDetailView({ folder, onBack, onCreateReview, onVie
 
       const data = await response.json()
       setFiles(Array.isArray(data) ? data : [])
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to fetch folder files:', error)
-      setError(error.message || 'Failed to fetch files')
+      setError(error instanceof Error ? error.message : 'Failed to fetch files')
     } finally {
       setLoading(false)
     }

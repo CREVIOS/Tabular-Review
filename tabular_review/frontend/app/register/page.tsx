@@ -1,5 +1,5 @@
 import { RegisterForm } from '@/components/auth/register-form'
-import { Shield, Sparkles, FileText, BarChart3, Lock, Users, Zap } from 'lucide-react'
+import { Shield} from 'lucide-react'
 
 export default function RegisterPage() {
   return (

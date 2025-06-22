@@ -14,9 +14,7 @@ import {
   Sparkles,
   FolderOpen,
   Upload,
-  Table,
   Activity,
-  TrendingUp,
   FileText,
   Folder
 } from 'lucide-react'

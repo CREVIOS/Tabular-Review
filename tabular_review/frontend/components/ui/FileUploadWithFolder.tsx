@@ -67,7 +67,7 @@ export default function FileUploadWithFolders({
 
       const data = await response.json()
       setFolders(data)
-    } catch (error: any) {
+    } catch (error: Error | unknown) {
       console.error('Failed to fetch folders:', error)
       setError('Failed to load folders')
     } finally {
@@ -177,9 +177,9 @@ export default function FileUploadWithFolders({
       setSelectedFiles([])
       onUploadSuccess()
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Upload failed:', error)
-      setError(error.message || 'Upload failed. Please try again.')
+      setError(error instanceof Error ? error.message : 'Upload failed. Please try again.')
     } finally {
       setUploading(false)
     }

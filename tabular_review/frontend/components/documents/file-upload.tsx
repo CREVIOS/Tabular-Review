@@ -1,11 +1,11 @@
 "use client"
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { files } from '@/lib/api'
-import { IconCloudUpload, IconX, IconAlertCircle } from '@tabler/icons-react'
+import { IconCloudUpload, IconX, IconAlertCircle, IconFiles, IconFolder } from '@tabler/icons-react'
 
 interface FileUploadProps {
   onUploadSuccess: () => void
@@ -16,6 +16,8 @@ export function FileUpload({ onUploadSuccess, folderId }: FileUploadProps) {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const folderInputRef = useRef<HTMLInputElement>(null)
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     // Filter files based on allowed types (matching backend security)
@@ -44,7 +46,8 @@ export function FileUpload({ onUploadSuccess, folderId }: FileUploadProps) {
     // Show warning for rejected files
     const rejectedCount = acceptedFiles.length - validFiles.length
     if (rejectedCount > 0) {
-      alert(`${rejectedCount} file(s) were rejected. Please upload PDF, Word, Excel, or text files only.`)
+      setError(`${rejectedCount} file(s) were rejected. Please upload PDF, Word, Excel, or text files only.`)
+      setTimeout(() => setError(null), 5000) // Clear error after 5 seconds
     }
   }, [])
 
@@ -61,6 +64,36 @@ export function FileUpload({ onUploadSuccess, folderId }: FileUploadProps) {
     maxSize: 50 * 1024 * 1024, // 50MB limit
     multiple: true
   })
+
+  const handleFileSelect = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click()
+    }
+  }
+
+  const handleFolderSelect = () => {
+    if (folderInputRef.current) {
+      folderInputRef.current.click()
+    }
+  }
+
+  const handleFileInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || [])
+    if (files.length > 0) {
+      onDrop(files)
+    }
+    // Reset the input to allow selecting the same files again
+    event.target.value = ''
+  }
+
+  const handleFolderInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || [])
+    if (files.length > 0) {
+      onDrop(files)
+    }
+    // Reset the input to allow selecting the same folder again
+    event.target.value = ''
+  }
 
   const removeFile = (index: number) => {
     setSelectedFiles(files => files.filter((_, i) => i !== index))
@@ -106,6 +139,26 @@ export function FileUpload({ onUploadSuccess, folderId }: FileUploadProps) {
 
   return (
     <div className="space-y-3 sm:space-y-4">
+      {/* Hidden file inputs */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept=".pdf,.doc,.docx,.txt,.xls,.xlsx"
+        onChange={handleFileInputChange}
+        className="hidden"
+      />
+      <input
+        ref={folderInputRef}
+        type="file"
+        /* @ts-ignore */
+        webkitdirectory=""
+        directory=""
+        multiple
+        onChange={handleFolderInputChange}
+        className="hidden"
+      />
+
       <Card>
         <CardContent className="p-4 sm:p-6">
           <div
@@ -123,11 +176,40 @@ export function FileUpload({ onUploadSuccess, folderId }: FileUploadProps) {
             ) : (
               <div>
                 <p className="text-base sm:text-lg font-medium mb-1">
-                  Drop files here or click to browse
+                  Drop files or folders here
                 </p>
-                <p className="text-xs sm:text-sm text-muted-foreground px-2">
+                <p className="text-xs sm:text-sm text-muted-foreground px-2 mb-4">
                   Support for PDF, Word, Excel, and text files (max 50MB each)
                 </p>
+                
+                {/* Upload Options */}
+                <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    className="bg-white border-blue-300 text-blue-700 hover:bg-blue-50"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleFileSelect()
+                    }}
+                  >
+                    <IconFiles className="h-4 w-4 mr-2" />
+                    Select Files
+                  </Button>
+                  
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    className="bg-white border-green-300 text-green-700 hover:bg-green-50"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleFolderSelect()
+                    }}
+                  >
+                    <IconFolder className="h-4 w-4 mr-2" />
+                    Select Folder
+                  </Button>
+                </div>
               </div>
             )}
           </div>
@@ -145,9 +227,19 @@ export function FileUpload({ onUploadSuccess, folderId }: FileUploadProps) {
       {selectedFiles.length > 0 && (
         <Card>
           <CardContent className="p-4 sm:p-6">
-            <h3 className="font-medium mb-3 text-sm sm:text-base">
-              Selected Files ({selectedFiles.length})
-            </h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-medium text-sm sm:text-base">
+                Selected Files ({selectedFiles.length})
+              </h3>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelectedFiles([])}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                Clear All
+              </Button>
+            </div>
             <div className="space-y-2 max-h-60 sm:max-h-80 overflow-y-auto">
               {selectedFiles.map((file, index) => (
                 <div 
@@ -179,7 +271,14 @@ export function FileUpload({ onUploadSuccess, folderId }: FileUploadProps) {
               disabled={uploading}
               className="w-full mt-3 sm:mt-4 touch-target"
             >
-              {uploading ? 'Uploading...' : `Upload ${selectedFiles.length} file${selectedFiles.length !== 1 ? 's' : ''}`}
+              {uploading ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Uploading...
+                </>
+              ) : (
+                `Upload ${selectedFiles.length} file${selectedFiles.length !== 1 ? 's' : ''}`
+              )}
             </Button>
           </CardContent>
         </Card>

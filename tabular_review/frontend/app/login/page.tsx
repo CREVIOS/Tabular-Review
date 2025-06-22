@@ -1,4 +1,4 @@
-import { Shield, Sparkles, FileText, BarChart3 } from 'lucide-react'
+import { Shield } from 'lucide-react'
 import { LoginForm } from '@/components/auth/login-form'
 
 export default function LoginPage() {

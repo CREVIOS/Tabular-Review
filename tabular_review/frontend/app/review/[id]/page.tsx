@@ -32,14 +32,17 @@ import {
   useDisconnectSSE,
   useConnectionStatus,
   useSetError,
-  useStoreError
+  useStoreError,
+  useClearProcessingCells
 } from '../../../store/useRealtimeStore'
 
 // Types
 import { 
   NewColumn, 
   SelectedCell, 
-  File
+  File,
+  Review,
+  RealTimeUpdates
 } from '../../../types'
 
 // API for column operations (not in optimized hooks yet)
@@ -47,10 +50,10 @@ import { useApi } from '../../../hooks/useApi'
 
 // **DEBUG: Add debug panel for development**
 const DebugPanel = ({ review, connectionStatus, processingCells, realTimeUpdates }: {
-  review: any
+  review: Review
   connectionStatus: string
   processingCells: Set<string>
-  realTimeUpdates: Record<string, any>
+  realTimeUpdates: RealTimeUpdates
 }) => {
   if (process.env.NODE_ENV !== 'development') return null
   
@@ -92,11 +95,12 @@ export default function ReviewDetailPage() {
   const connectionStatus = useConnectionStatus()
   const setError = useSetError()
   const storeError = useStoreError()
+  const clearProcessingCells = useClearProcessingCells()
   
-  // **FIX: Load basic review first, then load with results separately**
-  const { data: basicReview, isLoading: basicLoading, error: reviewError } = useReview(reviewId, false) // Basic review without results
+  // **FIX: Load basic review first, then load with results separately - removed unused variables**
+  const { data: basicReview, error: reviewError } = useReview(reviewId, false) // Basic review without results
   const { data: fullReview, isLoading: resultsLoading } = useReview(reviewId, true) // Full review with results
-  const { data: files = [], isLoading: filesLoading } = useFiles()
+  const { data: files = [] } = useFiles()
   const addDocumentsMutation = useAddDocuments()
   const startAnalysisMutation = useStartAnalysis()
   
@@ -106,9 +110,8 @@ export default function ReviewDetailPage() {
   // API hook for column operations
   const { addColumnToReview, fetchDocumentMarkdown } = useApi()
   
-  // Local state - Enhanced for mobile
+  // Local state - Enhanced for mobile - removed unused showDocumentViewer
   const [selectedCell, setSelectedCell] = useState<SelectedCell | null>(null)
-  const [showDocumentViewer, setShowDocumentViewer] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [showMobileSidebar, setShowMobileSidebar] = useState(false) // New mobile sidebar state
   const [showAddColumnModal, setShowAddColumnModal] = useState(false)
@@ -147,7 +150,7 @@ export default function ReviewDetailPage() {
     }
   }, [reviewId, review?.id, connectSSE, disconnectSSE])
 
-  // **FIX 2: Add optimistic processing cells for newly created reviews**
+  // **FIX 2: Add optimistic processing cells for newly created reviews - FIXED DEPENDENCY**
   useEffect(() => {
     if (review && review.status === 'processing' && review.files && review.columns) {
       // Check if this is a newly created review (very recent created_at)
@@ -172,7 +175,18 @@ export default function ReviewDetailPage() {
         })
       }
     }
-  }, [review])
+  }, [review]) // Fixed: Added review dependency
+
+  // **FIX: Clear processing cells when analysis completed and update review data**
+  useEffect(() => {
+    if (review && review.status === 'completed') {
+      if (processingCells.size > 0) {
+        clearProcessingCells()
+      }
+      // ensure latest results fetched
+      queryClient.invalidateQueries({ queryKey: ['review', reviewId, true] })
+    }
+  }, [review?.status])
 
   // Error handling
   useEffect(() => {
@@ -235,8 +249,8 @@ export default function ReviewDetailPage() {
         })
       }
       
-      queryClient.setQueryData(queryKeys.review(reviewId), (old: any) => 
-        old ? { ...old, status: 'processing' } : old
+      queryClient.setQueryData(queryKeys.review(reviewId), (old: Review | undefined) => 
+        old ? { ...old, status: 'processing' as const } : old
       )
       
       await startAnalysisMutation.mutateAsync(reviewId)
@@ -247,7 +261,7 @@ export default function ReviewDetailPage() {
     }
   }, [review, reviewId, startAnalysisMutation, connectSSE, queryClient, setError])
 
-  const handleCellClick = useCallback(async (reviewId: string, fileId: string, columnId: string, result: any) => {
+  const handleCellClick = useCallback(async (reviewId: string, fileId: string, columnId: string, result: { extracted_value: string | null; source_reference?: string; confidence_score: number }) => {
     if (!result || !result.extracted_value) return
     
     const markdownContent = await fetchDocumentMarkdown(fileId)
@@ -260,7 +274,6 @@ export default function ReviewDetailPage() {
       confidence: result.confidence_score,
       markdownContent
     })
-    setShowDocumentViewer(true)
   }, [fetchDocumentMarkdown])
 
   const handleAddColumn = useCallback(async () => {
@@ -479,7 +492,7 @@ export default function ReviewDetailPage() {
       {/* Modals - Enhanced for mobile */}
       <DocumentViewer
         selectedCell={selectedCell}
-        onClose={() => setShowDocumentViewer(false)}
+        onClose={() => setSelectedCell(null)}
         isMobile={isMobile}
       />
 

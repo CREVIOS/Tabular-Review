@@ -6,28 +6,17 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { 
   RefreshCw, 
-  AlertCircle, 
   Plus, 
   Search, 
-  Filter, 
   LayoutGrid, 
   LayoutList,
-  Sparkles,
-  TrendingUp,
   FileText,
-  Users,
-  Clock,
-  CheckCircle,
-  AlertTriangle,
   BarChart3,
-  Zap
 } from 'lucide-react'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 // Optimized hooks with caching
 import { 
@@ -403,7 +392,7 @@ export default function TabularReviewPage() {
                             <Badge variant={
                               review.status === 'completed' ? 'default' :
                               review.status === 'processing' ? 'secondary' :
-                              review.status === 'failed' ? 'destructive' : 'outline'
+                              review.status === 'error' ? 'destructive' : 'outline'
                             }>
                               {review.status}
                             </Badge>
