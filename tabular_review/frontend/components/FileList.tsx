@@ -12,7 +12,6 @@ import {
   Loader2,
   Sparkles,
   HardDrive,
-  FolderOpen
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -73,7 +72,7 @@ export default function FileList({
   const [folders, setFolders] = useState<Folder[]>([])
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<string>('all')
-  const [loading, setLoading] = useState(false)
+  const [, setLoading] = useState(false)
 
   // Fetch folders on mount
   useEffect(() => {

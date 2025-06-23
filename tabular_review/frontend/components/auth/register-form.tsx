@@ -159,12 +159,14 @@ export function RegisterForm() {
       setError(errorMessage)
       
       // Add specific handling for common registration errors
-      if (error.message?.includes('Email already exists')) {
-        setError("An account with this email already exists. Please try logging in instead.")
-      } else if (error.message?.includes('Invalid email')) {
-        setError("Please enter a valid email address.")
-      } else if (error.message?.includes('Weak password')) {
-        setError("Password does not meet security requirements. Please choose a stronger password.")
+      if (error instanceof Error && error.message) {
+        if (error.message?.includes('Email already exists')) {
+          setError("An account with this email already exists. Please try logging in instead.")
+        } else if (error.message?.includes('Invalid email')) {
+          setError("Please enter a valid email address.")
+        } else if (error.message?.includes('Weak password')) {
+          setError("Password does not meet security requirements. Please choose a stronger password.")
+        }
       }
     } finally {
       setIsSubmitting(false)
@@ -353,7 +355,7 @@ export function RegisterForm() {
               ) : (
                 <>
                   <AlertCircle className="h-3 w-3 text-red-500" />
-                  <span className="text-xs text-red-600">Passwords don't match</span>
+                  <span className="text-xs text-red-600">Passwords don&apos;t match</span>
                 </>
               )}
             </div>

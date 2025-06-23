@@ -856,15 +856,15 @@ export default function EnhancedCreateReview({
                     <ul className="space-y-2 text-sm text-purple-800">
                       <li className="flex items-start gap-2">
                         <span className="text-purple-500">•</span>
-                        <span>Be specific: "Extract contract value in USD format" vs "Find money"</span>
+                        <span>Be specific: &quot;Extract contract value in USD format&quot; vs &quot;Find money&quot;</span>
                       </li>
                       <li className="flex items-start gap-2">
                         <span className="text-purple-500">•</span>
-                        <span>Include format preferences: "Date in MM/DD/YYYY format"</span>
+                        <span>Include format preferences: &quot;Date in MM/DD/YYYY format&quot;</span>
                       </li>
                       <li className="flex items-start gap-2">
                         <span className="text-purple-500">•</span>
-                        <span>Use clear column names: "Invoice Total" not "Amount"</span>
+                        <span>Use clear column names: &quot;Invoice Total&quot; not &quot;Amount&quot;</span>
                       </li>
                     </ul>
                   </div>

@@ -1,6 +1,6 @@
 "use client"
 
-import { ColumnDef } from "@tanstack/react-table"
+import { ColumnDef, Column } from "@tanstack/react-table"
 import { useCallback } from "react"
 import {
   ArrowUpDown,
@@ -44,7 +44,7 @@ function CenteredHeader({
   column,
 }: {
   title: React.ReactNode
-  column: any
+  column: Column<ReviewTableRow>
 }) { 
   const handleSort = useCallback(() => {
     column.toggleSorting(column.getIsSorted() === "asc")
@@ -79,7 +79,6 @@ export function createColumns({
   processingCells,
   onCellClick,
   onViewFile,
-  isMobile = false,
 }: CreateColumnsProps): ColumnDef<ReviewTableRow>[] {
   /* ─────────────────────────────  static columns  ─────────────────────────── */
   const baseColumns: ColumnDef<ReviewTableRow>[] = [
@@ -184,7 +183,7 @@ export function createColumns({
 
   /* ─────────────────────────────  dynamic columns  ────────────────────────── */
   const dynamicColumns: ColumnDef<ReviewTableRow>[] = columns.map(
-    (col, idx) => ({
+    (col,) => ({
       id: col.id,
       accessorKey: `results.${col.id}`,
       header: ({ column }) => (

@@ -131,7 +131,7 @@ class SecureTokenManager {
       const expiry = localStorage.getItem(this.EXPIRY_KEY)
       return expiry ? new Date(expiry) : null
     } catch (error) {
-      return null
+      return error instanceof Error ? null : null
     }
   }
 
@@ -168,7 +168,7 @@ class SecureTokenManager {
       const activity = localStorage.getItem(this.ACTIVITY_KEY)
       return activity ? new Date(activity) : null
     } catch (error) {
-      return null
+      return error instanceof Error ? null : null
     }
   }
 
@@ -247,9 +247,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         const response = await api.get('/api/auth/verify')
         return response.status === 200
-      } catch (error: any) {
+      } catch (error: unknown) {
         // If the verify endpoint doesn't exist (404), but we have a valid token locally, continue
-        if (error.response?.status === 404) {
+        if (error && typeof error === 'object' && 'response' in error && 
+            error.response && typeof error.response === 'object' && 'status' in error.response && 
+            error.response.status === 404) {
           console.warn('Token verification endpoint not available, using local validation')
           return true // Continue with local token validation
         }
@@ -295,6 +297,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [validateSession])
 
+    // Logout function - graceful handling of missing endpoint
+  const logout = useCallback(() => {
+    try {
+      // Try to call logout API, but don't fail if it doesn't exist
+      api.post('/api/auth/logout').catch(err => {
+        // Only log error if it's not a 404 (missing endpoint)
+        if (err.response?.status !== 404) {
+          console.error('Logout API call failed:', err)
+        }
+      })
+    } catch (error) {
+      console.error('Logout error:', error)
+    } finally {
+      SecureTokenManager.clearToken()
+      setAuthState({
+        user: null,
+        isAuthenticated: false,
+        isLoading: false,
+        lastActivity: null,
+        sessionExpiry: null
+      })
+      router.push('/login')
+    }
+  }, [router])
+
   // Refresh authentication - with fallback for missing endpoint
   const refreshAuth = useCallback(async () => {
     try {
@@ -311,15 +338,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         lastActivity: new Date(),
         sessionExpiry: SecureTokenManager.getTokenExpiry()
       }))
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Token refresh failed:', error)
       // If refresh endpoint doesn't exist, just log the user out
-      if (error.response?.status === 404) {
+      if (error && typeof error === 'object' && 'response' in error && 
+          error.response && typeof error.response === 'object' && 'status' in error.response &&
+          error.response.status === 404) {
         console.warn('Token refresh endpoint not available')
       }
       logout()
     }
-  }, [])
+  }, [logout])
 
   // Login function
   const login = useCallback(async (email: string, password: string) => {
@@ -369,31 +398,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error) {
       console.error('Registration failed:', error)
       throw error
-    }
-  }, [router])
-
-  // Logout function - graceful handling of missing endpoint
-  const logout = useCallback(() => {
-    try {
-      // Try to call logout API, but don't fail if it doesn't exist
-      api.post('/api/auth/logout').catch(err => {
-        // Only log error if it's not a 404 (missing endpoint)
-        if (err.response?.status !== 404) {
-          console.error('Logout API call failed:', err)
-        }
-      })
-    } catch (error) {
-      console.error('Logout error:', error)
-    } finally {
-      SecureTokenManager.clearToken()
-      setAuthState({
-        user: null,
-        isAuthenticated: false,
-        isLoading: false,
-        lastActivity: null,
-        sessionExpiry: null
-      })
-      router.push('/login')
     }
   }, [router])
 

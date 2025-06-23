@@ -3,7 +3,6 @@ import { Search, ChevronLeft, ChevronRight, FileText, Folder, Plus } from 'lucid
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { File, Review } from '../types'
 
 interface ReviewFileSidebarProps {

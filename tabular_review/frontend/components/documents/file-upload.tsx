@@ -151,7 +151,8 @@ export function FileUpload({ onUploadSuccess, folderId }: FileUploadProps) {
       <input
         ref={folderInputRef}
         type="file"
-        /* @ts-ignore */
+        // ts error 
+        /* @ts-expect-error reason */
         webkitdirectory=""
         directory=""
         multiple

@@ -49,7 +49,7 @@ export const ReviewList: React.FC<ReviewListProps> = ({
 }) => {
   const [folders, setFolders] = useState<Folder[]>([])
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const [loading, setLoading] = useState(false)
+  const [, setLoading] = useState(false)
 
   // Fetch folders for filtering
   useEffect(() => {

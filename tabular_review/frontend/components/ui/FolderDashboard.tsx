@@ -5,7 +5,6 @@ import {
   Files, 
   Edit3, 
   Trash2, 
-  Upload, 
   MoreVertical,
   FolderOpen,
   HardDrive,

@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { IconCloudUpload, IconX, IconFolder, IconPlus } from '@tabler/icons-react'
+import { IconCloudUpload, IconX } from '@tabler/icons-react'
 import { Folder, Files } from 'lucide-react'
 
 interface Folder {

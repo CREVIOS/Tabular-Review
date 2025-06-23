@@ -34,7 +34,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[]
@@ -142,13 +142,20 @@ export function ReviewDataTable<TData, TValue>({
       processing: 0,
       failed: 0,
       draft: 0,
-    }
+    };
+
     
-    data.forEach((item: any) => {
-      if (counts.hasOwnProperty(item.status)) {
-        counts[item.status as keyof typeof counts]++
-      }
-    })
+    // data.forEach((item:ItemType) => {
+    //   if (counts.hasOwnProperty(item.status)) {
+    //     counts[item.status as keyof typeof counts]++
+    //   }
+    // })
+
+    (data as Array<{ status: keyof typeof counts }>).forEach((item) => {
+    if (counts.hasOwnProperty(item.status)) {
+      counts[item.status]++;
+    }
+  });
     
     return counts
   }, [data])

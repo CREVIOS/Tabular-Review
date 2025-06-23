@@ -36,7 +36,6 @@ export const ReviewTable: React.FC<ReviewTableProps> = ({
   onStartAnalysis,
   onDropFile,
   isMobile = false,
-  folderContext
 }) => {
   const [isDragOver, setIsDragOver] = useState(false)
 
@@ -154,7 +153,7 @@ export const ReviewTable: React.FC<ReviewTableProps> = ({
     let completedCells = 0
     
     tableData.forEach(row => {
-      Object.entries(row.results).forEach(([columnId, result]) => {
+      Object.entries(row.results).forEach(([, result]) => {
         if (result && (result.extracted_value !== null || result.error)) {
           completedCells++
         }
@@ -229,7 +228,7 @@ export const ReviewTable: React.FC<ReviewTableProps> = ({
         })
       }
     }
-  }, [review, realTimeUpdates, processingCells, tableData, calculatedCompletionPercentage])
+  }, [review, realTimeUpdates, processingCells, tableData, calculatedCompletionPercentage, enhancedProcessingCells])
 
   // Show empty state if no files
   if (!review.files || review.files.length === 0) {
