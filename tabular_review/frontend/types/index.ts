@@ -4,16 +4,22 @@ export interface Review {
   id: string;
   name: string;
   description?: string;
-  status: 'draft' | 'queued' | 'processing' | 'completed' | 'error';
+  status: 'draft' | 'processing' | 'completed' | 'failed' | 'error';
   total_files: number;
   total_columns: number;
   completion_percentage: number;
   created_at: string;
-  folder_id: string | null;
+  updated_at: string;
+  folder_id?: string;
   files?: ReviewFile[];
   columns?: ReviewColumn[];
   results?: ReviewResult[];
   error?: string;
+}
+
+export interface ReviewTableRow extends Review {
+  folderName?: string;
+  folderColor?: string;
 }
 
 export interface ReviewFile {
@@ -61,9 +67,29 @@ export interface File {
   file_size: number;
   status: 'queued' | 'processing' | 'completed' | 'failed';
   created_at: string;
-  folder_id: string | null;
+  updated_at: string;
+  folder_id: string | null | undefined;
   // Add for compatibility
   name?: string; // Alternative name field
+  user_id: string;
+  file_type: string;
+  upload_date: string;
+  processed_date?: string;
+  file_path: string;
+  columns?: string[];
+  row_count?: number;
+  error_message?: string | null;
+}
+
+export interface Folder {
+  id: string;
+  name: string;
+  description: string | null;
+  color: string;
+  file_count: number;
+  total_size: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface NewReview {
@@ -110,62 +136,10 @@ export interface RealTimeUpdate extends Partial<ReviewResult> {
 
 export type RealTimeUpdates = Record<string, RealTimeUpdate>;
 
-// Additional type for the data table
-export interface ReviewTableRow {
+// Data table row type for review detail pages
+export interface ReviewDetailTableRow {
   file: ReviewFile;
   fileName: string;
   fileStatus: string;
   results: Record<string, ReviewResult | null>;
 }
-
-  export interface TabularReviewResponse {
-    id: string
-    user_id: string
-    name: string
-    description?: string
-    status: string
-    review_scope: string
-    folder_id?: string
-    created_at: string
-    updated_at: string
-    last_processed_at?: string
-    columns: Array<TabularReviewColumnResponse>
-    files: Array<TabularReviewFileResponse>
-    total_files: number
-    total_columns: number
-    completion_percentage: number
-  }
-
-  interface TabularReviewColumnResponse {
-    id: string
-    column_name: string
-    prompt: string
-    column_order: number
-    data_type: string
-    created_at: string
-  }
-
-  interface TabularReviewFileResponse {
-    id: string
-    file_id: string
-    filename: string
-    file_size?: number
-    status: string
-    added_at: string
-  }
-  
-
-  export interface FileResponse {
-    id: string
-    user_id: string
-    original_filename: string
-    file_size?: number
-    file_type?: string
-    storage_path?: string
-    storage_url?: string
-    status: string
-    created_at: string
-    updated_at: string
-    processed_at?: string
-    error_message?: string
-  }

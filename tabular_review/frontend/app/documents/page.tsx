@@ -14,6 +14,8 @@ import {
   Eye
 } from 'lucide-react'
 import { auth } from '@/lib/api'
+import { fetchDocumentsData, formatFileSize } from '@/lib/documents-api'
+import type { Folder } from '@/types/documents'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
@@ -30,17 +32,6 @@ import { Textarea } from '@/components/ui/textarea'
 // Components
 import FolderDetailView from '@/components/FolderWithDetailView'
 import { FileUpload } from '@/components/documents/file-upload'
-
-interface Folder {
-  id: string
-  name: string
-  description: string | null
-  color: string
-  file_count: number
-  total_size: number
-  created_at: string
-  updated_at: string
-}
 
 const folderColors = [
   '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', 
@@ -91,25 +82,10 @@ export default function FolderManagementPage() {
       setLoading(true)
       setError(null)
       
-      const token = localStorage.getItem('auth_token')
-      if (!token) {
-        setError('Authentication required')
-        return
-      }
-
-      const response = await fetch('http://localhost:8000/api/folders/', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      })
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
-      const data = await response.json()
-      setFolders(Array.isArray(data) ? data : [])
+      // Use the new optimized API endpoint
+      const documentsData = await fetchDocumentsData()
+      setFolders(documentsData.folders)
+      
     } catch (error: unknown) {
       console.error('Failed to fetch folders:', error)
       const errorMessage = error instanceof Error ? error.message : 'Failed to fetch folders'
@@ -192,14 +168,6 @@ export default function FolderManagementPage() {
     setShowUploadToFolder(false)
     setUploadFolderId(null)
     fetchFolders() // Refresh to update file counts
-  }
-
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return '0 Bytes'
-    const k = 1024
-    const sizes = ['Bytes', 'KB', 'MB', 'GB']
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
   }
 
   const filteredFolders = folders.filter(folder =>

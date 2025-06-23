@@ -291,13 +291,19 @@ export const useRealtimeStore = create<RealtimeState>()(
                 console.log('✅ Column analysis completed:', data.column_id, data.message)
                 // Clear any remaining processing cells for this column
                 if (data.column_id) {
-                  const currentState = get()
-                  const cellsToRemove = Array.from(currentState.processingCells).filter(cellKey => 
-                    cellKey.endsWith(`-${data.column_id}`)
-                  )
-                  cellsToRemove.forEach(cellKey => {
-                    console.log('🧹 Clearing stale processing cell:', cellKey)
-                    removeProcessingCell(cellKey)
+                  set((state) => {
+                    const cellsToRemove = Array.from(state.processingCells).filter(cellKey => 
+                      cellKey.endsWith(`-${data.column_id}`)
+                    )
+                    
+                    if (cellsToRemove.length > 0) {
+                      console.log('🧹 Clearing stale processing cells:', cellsToRemove)
+                      const newSet = new Set(state.processingCells)
+                      cellsToRemove.forEach(cellKey => newSet.delete(cellKey))
+                      return { processingCells: newSet }
+                    }
+                    
+                    return state // No change needed
                   })
                 }
                 break
