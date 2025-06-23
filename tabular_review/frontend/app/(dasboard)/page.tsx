@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { auth } from '@/lib/api'
+import { fetchDashboardData, calculateFileStats, calculateReviewStats, getRecentActivity } from '@/lib/dashboard-api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { 
@@ -35,7 +36,7 @@ export default function DashboardPage() {
   })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [recentActivity, setRecentActivity] = useState([])
+  const [recentActivity, setRecentActivity] = useState<any[]>([])
 
   useEffect(() => {
     // Check authentication
@@ -45,97 +46,43 @@ export default function DashboardPage() {
       return
     }
 
-    fetchDashboardData()
+    fetchDashboard()
   }, [router])
 
-  const fetchDashboardData = async () => {
-      try {
+  const fetchDashboard = async () => {
+    try {
       setError('')
+      setLoading(true)
       
-      const token = localStorage.getItem('auth_token')
-      if (!token) {
-        setError('Authentication token not found. Please log in again.')
-        return
-      }
-
-      // Fetch all data in parallel
-      const [filesResponse, reviewsResponse, foldersResponse] = await Promise.all([
-        fetch('http://localhost:8000/api/files/', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }),
-        fetch('http://localhost:8000/api/reviews/', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }),
-        fetch('http://localhost:8000/api/folders/', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        })
-      ])
-      
-      if (!filesResponse.ok || !reviewsResponse.ok || !foldersResponse.ok) {
-        throw new Error('Failed to fetch data')
-      }
-      
-      const [fileList, reviewsData, foldersData] = await Promise.all([
-        filesResponse.json(),
-        reviewsResponse.json(),
-        foldersResponse.json()
-      ])
+      // Use the new single API endpoint instead of three separate calls
+      const dashboardData = await fetchDashboardData()
       
       // Calculate file stats
-      const fileStats = fileList.reduce((acc: Record<string, number>, file: Record<string, unknown>) => {
-          acc.total++
-          if (file.status === 'processing' || file.status === 'queued') {
-            acc.processing++
-          } else if (file.status === 'completed') {
-            acc.completed++
-          } else if (file.status === 'failed') {
-            acc.failed++
-          }
-          return acc
-        }, { total: 0, processing: 0, completed: 0, failed: 0 })
-        
-      // Calculate review stats
-      const reviews = Array.isArray(reviewsData.reviews) ? reviewsData.reviews : (Array.isArray(reviewsData) ? reviewsData : [])
-      const reviewStats = {
-        totalReviews: reviews.length,
-        activeReviews: reviews.filter((r: Record<string, unknown>) => r.status === 'processing').length,
-        completedReviews: reviews.filter((r: Record<string, unknown>) => r.status === 'completed').length
-      }
-
+      const fileStats = calculateFileStats(dashboardData.documents)
+      
+      // Calculate review stats  
+      const reviewStats = calculateReviewStats(dashboardData.reviews)
+      
+      // Set combined stats
       setStats({
         ...fileStats,
         ...reviewStats,
-        totalFolders: Array.isArray(foldersData) ? foldersData.length : 0
+        totalFolders: dashboardData.folders.length
       })
 
       // Set recent activity
-      const recentFiles = fileList
-        .sort((a: Record<string, unknown>, b: Record<string, unknown>) => {
-          const aTime = (a.updated_at || a.created_at) as string;
-          const bTime = (b.updated_at || b.created_at) as string;
-          return new Date(bTime).getTime() - new Date(aTime).getTime();
-        })
-        .slice(0, 5)
-      
+      const recentFiles = getRecentActivity(dashboardData.documents, 5)
       setRecentActivity(recentFiles)
-        setError('')
-      } catch (error: unknown) {
-        console.error('Failed to fetch dashboard data:', error)
-        const errorObj = error as { response?: { data?: { detail?: string } } }
-        setError(errorObj.response?.data?.detail || 'Failed to load dashboard data')
-      } finally {
-        setLoading(false)
-      }
+      
+      setError('')
+    } catch (error: unknown) {
+      console.error('Failed to fetch dashboard data:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load dashboard data'
+      setError(errorMessage)
+    } finally {
+      setLoading(false)
     }
+  }
 
   const currentUser = auth.getCurrentUser()
 
@@ -180,7 +127,7 @@ export default function DashboardPage() {
           </p>
         )}
       </div>
-        <Button onClick={fetchDashboardData} variant="outline" size="sm">
+        <Button onClick={fetchDashboard} variant="outline" size="sm">
           <Activity className="h-4 w-4 mr-2" />
           Refresh
         </Button>

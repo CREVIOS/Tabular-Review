@@ -26,4 +26,6 @@ export interface User {
     word_count?: number
     created_at: string
   }
+  
 
+  

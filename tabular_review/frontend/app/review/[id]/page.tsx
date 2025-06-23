@@ -207,6 +207,8 @@ export default function ReviewDetailPage() {
       folder_id: review.folder_id,
       user_id: '',
       file_type: 'application/pdf',
+      upload_date: '2024-01-01T00:00:00.000Z',
+      file_path: '',
       storage_path: '',
       storage_url: '',
       created_at: '2024-01-01T00:00:00.000Z',
