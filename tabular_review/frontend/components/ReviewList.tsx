@@ -5,6 +5,7 @@ import { Review } from '../types'
 import { ReviewDataTable } from './review-list/data-table'
 import { createReviewColumns, ReviewTableRow } from './review-list/columns'
 import FileList from './FileList'
+import { createClient } from '@/lib/supabase/client'
 
 interface Folder {
   id: string
@@ -59,12 +60,17 @@ export const ReviewList: React.FC<ReviewListProps> = ({
   const fetchFolders = async () => {
     try {
       setLoading(true)
-      const token = localStorage.getItem('auth_token')
-      if (!token) return
+      const supabase = createClient()
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      
+      if (sessionError || !session) {
+        console.error('No authentication session found')
+        return
+      }
 
       const response = await fetch('http://localhost:8000/api/folders/', {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json'
         }
       })

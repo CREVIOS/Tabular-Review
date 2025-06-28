@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { updateSession } from "@/lib/supabase/middleware"
+import { File, Review, Folder } from '@/types'
+import { createClient } from '@/lib/supabase/server'
 
 // Handle both development and production backend URLs
 const getBackendUrl = () => {
@@ -19,65 +22,89 @@ export async function GET(request: NextRequest) {
     console.log('Dashboard API: Using backend URL:', BACKEND_URL)
     console.log('Dashboard API: Environment:', process.env.NODE_ENV)
     
-    // Get the authorization token from cookies or headers
-    const token = request.cookies.get('auth_token')?.value || 
-                  request.headers.get('Authorization')?.replace('Bearer ', '')
-
-    if (!token) {
-      console.log('Dashboard API: No auth token found')
+    // Get Supabase session and user
+    const { user } = await updateSession(request)
+    
+    if (!user) {
+      console.log('Dashboard API: No authenticated user found')
       return NextResponse.json(
-        { error: 'Unauthorized - No token provided' },
+        { error: 'Unauthorized - No authenticated user' },
         { status: 401 }
       )
     }
 
-    console.log('Dashboard API: Using auth token:', token.substring(0, 20) + '...')
+    console.log('Dashboard API: Authenticated user:', user.email)
+
+    const supabase = await createClient()
+    
+    // Get the Supabase access token for backend API calls
+    const { data: { session } } = await supabase.auth.getSession()
+    
+    if (!session?.access_token) {
+      console.log('Dashboard API: No access token found')
+      return NextResponse.json(
+        { error: 'Unauthorized - No access token' },
+        { status: 401 }
+      )
+    }
 
     const headers = {
-      'Authorization': `Bearer ${token}`,
+      'Authorization': `Bearer ${session.access_token}`,
       'Content-Type': 'application/json',
     }
 
     console.log('Dashboard API: Making parallel requests to backend...')
 
-    // Fetch all dashboard data in parallel with timeouts
+    // Helper function to make requests with retry logic
+    const makeRequestWithRetry = async (url: string, maxRetries = 2) => {
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          console.log(`Dashboard API: Attempt ${attempt} for ${url}`)
+          const response = await fetch(url, {
+            method: 'GET',
+            headers,
+            signal: AbortSignal.timeout(45000), // Increased to 45 seconds
+            keepalive: false // Disable keepalive to prevent socket reuse issues
+          })
+          
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+          }
+          
+          return response
+        } catch (err) {
+          const errorMessage = err instanceof Error ? err.message : String(err)
+          console.error(`Dashboard API: Attempt ${attempt} failed for ${url}:`, errorMessage)
+          
+          if (attempt === maxRetries) {
+            throw err
+          }
+          
+          // Wait before retry with exponential backoff
+          const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000)
+          console.log(`Dashboard API: Retrying ${url} after ${delay}ms...`)
+          await new Promise(resolve => setTimeout(resolve, delay))
+        }
+      }
+    }
+
+    // Fetch all dashboard data in parallel with retry logic
     const [documentsResponse, reviewsResponse, foldersResponse] = await Promise.allSettled([
-      // Fetch documents/files
-      fetch(`${BACKEND_URL}/api/files/`, {
-        method: 'GET',
-        headers,
-        signal: AbortSignal.timeout(15000)
-      }).catch(err => {
-        console.error('Dashboard API: Failed to fetch files:', err.message)
-        throw err
-      }),
+      // Fetch documents/files with retry
+      makeRequestWithRetry(`${BACKEND_URL}/api/files/?page=1&limit=25`),
       
-      // Fetch reviews
-      fetch(`${BACKEND_URL}/api/reviews/`, {
-        method: 'GET',
-        headers,
-        signal: AbortSignal.timeout(15000)
-      }).catch(err => {
-        console.error('Dashboard API: Failed to fetch reviews:', err.message)
-        throw err
-      }),
+      // Fetch reviews with retry
+      makeRequestWithRetry(`${BACKEND_URL}/api/reviews/`),
       
-      // Fetch folders
-      fetch(`${BACKEND_URL}/api/folders/`, {
-        method: 'GET',
-        headers,
-        signal: AbortSignal.timeout(15000)
-      }).catch(err => {
-        console.error('Dashboard API: Failed to fetch folders:', err.message)
-        throw err
-      }),
+      // Fetch folders with retry
+      makeRequestWithRetry(`${BACKEND_URL}/api/folders/`),
     ])
 
     // Process responses and handle errors
     const result: {
-      documents: any[]
-      reviews: any[]
-      folders: any[]
+      documents: File[]
+      reviews: Review[]
+      folders: Folder[]
       errors?: string[]
     } = {
       documents: [],
@@ -88,7 +115,7 @@ export async function GET(request: NextRequest) {
     const errors: string[] = []
 
     // Process documents response
-    if (documentsResponse.status === 'fulfilled' && documentsResponse.value.ok) {
+    if (documentsResponse.status === 'fulfilled' && documentsResponse.value && documentsResponse.value.ok) {
       try {
         const documentsText = await documentsResponse.value.text()
         console.log('Dashboard API: Raw documents response:', documentsText.substring(0, 200) + '...')
@@ -113,15 +140,15 @@ export async function GET(request: NextRequest) {
         result.documents = []
       }
     } else {
-      const status = documentsResponse.status === 'fulfilled' ? documentsResponse.value.status : 'network_error'
-      const statusText = documentsResponse.status === 'fulfilled' ? documentsResponse.value.statusText : 'Network error'
+      const status = (documentsResponse.status === 'fulfilled' && documentsResponse.value) ? documentsResponse.value.status : 'network_error'
+      const statusText = (documentsResponse.status === 'fulfilled' && documentsResponse.value) ? documentsResponse.value.statusText : 'Network error'
       console.error(`Dashboard API: Documents request failed with status ${status}: ${statusText}`)
       if (documentsResponse.status === 'rejected') {
         console.error('Dashboard API: Documents request rejected:', documentsResponse.reason)
       }
       
       // Try to get error details if available
-      if (documentsResponse.status === 'fulfilled') {
+      if (documentsResponse.status === 'fulfilled' && documentsResponse.value) {
         try {
           const errorText = await documentsResponse.value.text()
           console.error('Dashboard API: Documents error response body:', errorText)
@@ -136,7 +163,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Process reviews response
-    if (reviewsResponse.status === 'fulfilled' && reviewsResponse.value.ok) {
+    if (reviewsResponse.status === 'fulfilled' && reviewsResponse.value && reviewsResponse.value.ok) {
       try {
         const reviewsData = await reviewsResponse.value.json()
         // Handle paginated response or direct array
@@ -153,8 +180,8 @@ export async function GET(request: NextRequest) {
         errors.push('Failed to parse reviews data')
       }
     } else {
-      const status = reviewsResponse.status === 'fulfilled' ? reviewsResponse.value.status : 'network_error'
-      const statusText = reviewsResponse.status === 'fulfilled' ? reviewsResponse.value.statusText : 'Network error'
+      const status = (reviewsResponse.status === 'fulfilled' && reviewsResponse.value) ? reviewsResponse.value.status : 'network_error'
+      const statusText = (reviewsResponse.status === 'fulfilled' && reviewsResponse.value) ? reviewsResponse.value.statusText : 'Network error'
       console.error(`Dashboard API: Reviews request failed with status ${status}: ${statusText}`)
       if (reviewsResponse.status === 'rejected') {
         console.error('Dashboard API: Reviews request rejected:', reviewsResponse.reason)
@@ -164,7 +191,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Process folders response
-    if (foldersResponse.status === 'fulfilled' && foldersResponse.value.ok) {
+    if (foldersResponse.status === 'fulfilled' && foldersResponse.value && foldersResponse.value.ok) {
       try {
         result.folders = await foldersResponse.value.json()
         console.log(`Dashboard API: Successfully fetched ${result.folders.length} folders`)
@@ -173,8 +200,8 @@ export async function GET(request: NextRequest) {
         errors.push('Failed to parse folders data')
       }
     } else {
-      const status = foldersResponse.status === 'fulfilled' ? foldersResponse.value.status : 'network_error'
-      const statusText = foldersResponse.status === 'fulfilled' ? foldersResponse.value.statusText : 'Network error'
+      const status = (foldersResponse.status === 'fulfilled' && foldersResponse.value) ? foldersResponse.value.status : 'network_error'
+      const statusText = (foldersResponse.status === 'fulfilled' && foldersResponse.value) ? foldersResponse.value.statusText : 'Network error'
       console.error(`Dashboard API: Folders request failed with status ${status}: ${statusText}`)
       if (foldersResponse.status === 'rejected') {
         console.error('Dashboard API: Folders request rejected:', foldersResponse.reason)

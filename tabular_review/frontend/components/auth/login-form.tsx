@@ -1,141 +1,145 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import React from "react"
+import { useState } from "react"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
 import { Eye, EyeOff, Mail, Lock, Shield, AlertCircle, Loader2, CheckCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Checkbox } from "@/components/ui/checkbox"
-import { useAuth } from "@/lib/auth-context"
-import { handleApiError } from "@/lib/api"
 import Link from "next/link"
+import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form"
+import { loginSchema, LoginFormValues } from "@/schemas/login"
+import { loginUser } from "@/app/(auth)/actions/login-action"
+import { useRouter } from "next/navigation"
+
+const MAX_ATTEMPTS = 5;
+const LOCKOUT_MINUTES = 15;
 
 export function LoginForm() {
-  const { login, isLoading } = useAuth()
-  const [formData, setFormData] = useState({
-    email: "",
-    password: ""
-  })
+  const router = useRouter()
   const [showPassword, setShowPassword] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
   const [error, setError] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [attemptCount, setAttemptCount] = useState(0)
-
-  // Enhanced validation
-  const validateEmail = (email: string): boolean => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    return emailRegex.test(email)
-  }
-
-  const validateForm = (): boolean => {
-    setError("")
-
-    if (!formData.email.trim()) {
-      setError("Email address is required")
-      return false
+  const [attemptCount, setAttemptCount] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('login_attempt_count');
+      return stored ? parseInt(stored, 10) : 0;
     }
-
-    if (!validateEmail(formData.email.trim())) {
-      setError("Please enter a valid email address")
-      return false
+    return 0;
+  });
+  const [lockoutTime, setLockoutTime] = useState<number | null>(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('login_lockout_time');
+      return stored ? parseInt(stored, 10) : null;
     }
+    return null;
+  });
 
-    if (!formData.password) {
-      setError("Password is required")
-      return false
-    }
-
-    if (formData.password.length < 6) {
-      setError("Password must be at least 6 characters")
-      return false
-    }
-
-    return true
-  }
-
-  const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }))
-    
-    // Clear error when user starts typing
-    if (error) {
-      setError("")
-    }
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    if (!validateForm()) {
-      return
-    }
-
-    // Rate limiting check
-    if (attemptCount >= 5) {
-      setError("Too many login attempts. Please wait 15 minutes before trying again.")
-      return
-    }
-
-    setIsSubmitting(true)
-    setError("")
-
-    try {
-      await login(
-        formData.email.trim().toLowerCase(),
-        formData.password
-      )
-
-      // Handle remember me functionality
-      if (rememberMe && typeof window !== 'undefined') {
-        localStorage.setItem('remember_user', formData.email.trim().toLowerCase())
-      } else if (typeof window !== 'undefined') {
-        localStorage.removeItem('remember_user')
-      }
-
-      // Reset attempt count on successful login
-      setAttemptCount(0)
-      
-    } catch (error: unknown) {
-      console.error("Login error:", error)
-      
-      // Increment attempt count
-      setAttemptCount(prev => prev + 1)
-      
-      const errorMessage = handleApiError(error)
-      setError(errorMessage)
-      
-      // Add specific handling for common login errors
-      if (error instanceof Error) {
-        if (error.message?.includes('Invalid credentials')) {
-          setError("Invalid email or password. Please check your credentials and try again.")
-        } else if (error.message?.includes('Account locked')) {
-          setError("Your account has been temporarily locked due to multiple failed login attempts.")
-        } else if (error.message?.includes('Email not verified')) {
-          setError("Please verify your email address before logging in.")
-        }
-      }
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
+  const form = useForm<LoginFormValues>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: {
+      email: "",
+      password: "",
+    },
+  })
 
   // Pre-fill email if user was remembered
-  useEffect(() => {
+  React.useEffect(() => {
     if (typeof window !== 'undefined') {
       const rememberedEmail = localStorage.getItem('remember_user')
       if (rememberedEmail) {
-        setFormData(prev => ({ ...prev, email: rememberedEmail }))
+        form.setValue('email', rememberedEmail)
         setRememberMe(true)
       }
     }
-  }, [])
+  }, [form])
+
+  // Effect to persist attemptCount and lockoutTime
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('login_attempt_count', attemptCount.toString());
+      if (lockoutTime) {
+        localStorage.setItem('login_lockout_time', lockoutTime.toString());
+      } else {
+        localStorage.removeItem('login_lockout_time');
+      }
+    }
+  }, [attemptCount, lockoutTime]);
+
+  // Effect to check and reset lockout after LOCKOUT_MINUTES
+  React.useEffect(() => {
+    if (lockoutTime) {
+      const now = Date.now();
+      const expires = lockoutTime + LOCKOUT_MINUTES * 60 * 1000;
+      if (now >= expires) {
+        setAttemptCount(0);
+        setLockoutTime(null);
+      } else {
+        const timeout = setTimeout(() => {
+          setAttemptCount(0);
+          setLockoutTime(null);
+        }, expires - now);
+        return () => clearTimeout(timeout);
+      }
+    }
+  }, [lockoutTime]);
 
   const getRemainingAttempts = (): number => {
-    return Math.max(0, 5 - attemptCount)
+    return Math.max(0, MAX_ATTEMPTS - attemptCount);
+  }
+
+  const onSubmit = async (values: LoginFormValues) => {
+    setError("")
+    if (attemptCount >= MAX_ATTEMPTS) {
+      if (!lockoutTime) setLockoutTime(Date.now())
+      setError(`Too many login attempts. Please wait ${LOCKOUT_MINUTES} minutes before trying again.`)
+      return
+    }
+    setIsSubmitting(true)
+    try {
+      const result = await loginUser({
+        email: values.email.trim().toLowerCase(),
+        password: values.password,
+      })
+      if (result?.error) {
+        setAttemptCount(prev => {
+          const next = prev + 1
+          if (next >= MAX_ATTEMPTS && !lockoutTime) setLockoutTime(Date.now())
+          return next
+        })
+        setError(result.message || "Login failed. Please try again.")
+        return
+      }
+      // Handle remember me functionality
+      if (rememberMe && typeof window !== 'undefined') {
+        localStorage.setItem('remember_user', values.email.trim().toLowerCase())
+      } else if (typeof window !== 'undefined') {
+        localStorage.removeItem('remember_user')
+      }
+      setAttemptCount(0)
+      setLockoutTime(null)
+
+      console.log("Login successful")
+      // Optionally redirect or show success
+      // window.location.href = "/dashboard"
+
+      setTimeout(() => {
+        router.push("/dashboard"); // Redirect to dashboard or home page after successful login
+      }, 1000);
+    } catch (err: unknown) {
+      setAttemptCount(prev => {
+        const next = prev + 1
+        if (next >= MAX_ATTEMPTS && !lockoutTime) setLockoutTime(Date.now())
+        return next
+      })
+      setError(err instanceof Error ? err.message : "Login failed. Please try again.")
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -158,7 +162,7 @@ export function LoginForm() {
           <AlertDescription>
             <div className="flex flex-col gap-1">
               <span>{error}</span>
-              {attemptCount > 0 && attemptCount < 5 && (
+              {attemptCount > 0 && attemptCount < MAX_ATTEMPTS && (
                 <span className="text-xs font-medium">
                   {getRemainingAttempts()} attempt{getRemainingAttempts() !== 1 ? 's' : ''} remaining
                 </span>
@@ -181,100 +185,110 @@ export function LoginForm() {
         </Alert>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Email */}
-        <div className="space-y-2">
-          <Label htmlFor="email" className="text-sm font-medium text-gray-700">
-            Email Address *
-          </Label>
-          <div className="relative">
-            <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-            <Input
-              id="email"
-              type="email"
-              placeholder="Enter your email"
-              value={formData.email}
-              onChange={(e) => handleInputChange("email", e.target.value)}
-              className="pl-10"
-              required
-              autoComplete="email"
-              disabled={isSubmitting}
-            />
-          </div>
-        </div>
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          {/* Email */}
+          <FormField
+            control={form.control}
+            name="email"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Email Address *</FormLabel>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                  <FormControl>
+                    <Input
+                      type="email"
+                      placeholder="Enter your email"
+                      autoComplete="email"
+                      disabled={isSubmitting}
+                      className="pl-10"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </div>
+              </FormItem>
+            )}
+          />
 
-        {/* Password */}
-        <div className="space-y-2">
-          <Label htmlFor="password" className="text-sm font-medium text-gray-700">
-            Password *
-          </Label>
-          <div className="relative">
-            <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-            <Input
-              id="password"
-              type={showPassword ? "text" : "password"}
-              placeholder="Enter your password"
-              value={formData.password}
-              onChange={(e) => handleInputChange("password", e.target.value)}
-              className="pl-10 pr-10"
-              required
-              autoComplete="current-password"
-              disabled={isSubmitting}
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 disabled:opacity-50"
-              disabled={isSubmitting}
+          {/* Password */}
+          <FormField
+            control={form.control}
+            name="password"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Password *</FormLabel>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                  <FormControl>
+                    <Input
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Enter your password"
+                      autoComplete="current-password"
+                      disabled={isSubmitting}
+                      className="pl-10 pr-10"
+                      {...field}
+                    />
+                  </FormControl>
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 disabled:opacity-50"
+                    disabled={isSubmitting}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                  <FormMessage />
+                </div>
+              </FormItem>
+            )}
+          />
+
+          {/* Remember Me & Forgot Password */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="remember"
+                checked={rememberMe}
+                onCheckedChange={(checked) => setRememberMe(checked === true)}
+                disabled={isSubmitting}
+              />
+              <label htmlFor="remember" className="text-sm text-gray-600">
+                Remember me
+              </label>
+            </div>
+            <Link 
+              href="/forgot-password" 
+              className="text-sm text-blue-600 hover:text-blue-700 hover:underline"
             >
-              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
+              Forgot password?
+            </Link>
           </div>
-        </div>
 
-        {/* Remember Me & Forgot Password */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="remember"
-              checked={rememberMe}
-              onCheckedChange={(checked) => setRememberMe(checked === true)}
-              disabled={isSubmitting}
-            />
-            <Label htmlFor="remember" className="text-sm text-gray-600">
-              Remember me
-            </Label>
-          </div>
-          <Link 
-            href="/forgot-password" 
-            className="text-sm text-blue-600 hover:text-blue-700 hover:underline"
+          {/* Submit Button */}
+          <Button
+            type="submit"
+            className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-medium py-3 shadow-lg hover:shadow-xl transition-all"
+            disabled={isSubmitting || attemptCount >= MAX_ATTEMPTS || !!lockoutTime}
           >
-            Forgot password?
-          </Link>
-        </div>
-
-        {/* Submit Button */}
-        <Button
-          type="submit"
-          className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-medium py-3 shadow-lg hover:shadow-xl transition-all"
-          disabled={isSubmitting || isLoading || attemptCount >= 5}
-        >
-          {isSubmitting || isLoading ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Signing in...
-            </>
-          ) : (
-            <>
-              <Shield className="mr-2 h-4 w-4" />
-              Sign In Securely
-            </>
-          )}
-        </Button>
-      </form>
+            {isSubmitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Signing in...
+              </>
+            ) : (
+              <>
+                <Shield className="mr-2 h-4 w-4" />
+                Sign In Securely
+              </>
+            )}
+          </Button>
+        </form>
+      </Form>
 
       {/* Rate Limit Warning */}
-      {attemptCount > 2 && attemptCount < 5 && (
+      {attemptCount > 2 && attemptCount < MAX_ATTEMPTS && (
         <Alert className="border-yellow-200 bg-yellow-50">
           <AlertCircle className="h-4 w-4 text-yellow-600" />
           <AlertDescription className="text-yellow-800">
@@ -284,15 +298,15 @@ export function LoginForm() {
       )}
 
       {/* Account Lockout */}
-      {attemptCount >= 5 && (
+      {lockoutTime && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
             <div className="flex flex-col gap-2">
               <span className="font-medium">Account Temporarily Locked</span>
               <span className="text-sm">
-                For security reasons, this account has been temporarily locked due to multiple failed login attempts.
-                Please wait 15 minutes before trying again, or{" "}
+                For security reasons, this account has been temporarily locked due to multiple failed login attempts.<br />
+                Please wait {LOCKOUT_MINUTES} minutes before trying again, or {" "}
                 <Link href="/forgot-password" className="underline font-medium">
                   reset your password
                 </Link>.

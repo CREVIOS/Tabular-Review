@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { updateSession } from "@/lib/supabase/middleware"
+import { File, Folder, FileStats } from '@/types/documents'
+import { createClient } from '@/lib/supabase/server'
 
 // Handle both development and production backend URLs
 const getBackendUrl = () => {
@@ -19,22 +22,35 @@ export async function GET(request: NextRequest) {
     console.log('Documents API: Using backend URL:', BACKEND_URL)
     console.log('Documents API: Environment:', process.env.NODE_ENV)
     
-    // Get the authorization token from cookies or headers
-    const token = request.cookies.get('auth_token')?.value || 
-                  request.headers.get('Authorization')?.replace('Bearer ', '')
-
-    if (!token) {
-      console.log('Documents API: No auth token found')
+    // Get Supabase session and user
+    const { user } = await updateSession(request)
+    
+    if (!user) {
+      console.log('Documents API: No authenticated user found')
       return NextResponse.json(
-        { error: 'Unauthorized - No token provided' },
+        { error: 'Unauthorized - No authenticated user' },
         { status: 401 }
       )
     }
 
-    console.log('Documents API: Using auth token:', token.substring(0, 20) + '...')
+    console.log('Documents API: Authenticated user:', user.email)
+
+    // Create a Supabase client to get the session
+    const supabase = await createClient()
+    
+    // Get the Supabase access token for backend API calls
+    const { data: { session } } = await supabase.auth.getSession()
+    
+    if (!session?.access_token) {
+      console.log('Documents API: No access token found')
+      return NextResponse.json(
+        { error: 'Unauthorized - No access token' },
+        { status: 401 }
+      )
+    }
 
     const headers = {
-      'Authorization': `Bearer ${token}`,
+      'Authorization': `Bearer ${session.access_token}`,
       'Content-Type': 'application/json',
     }
 
@@ -46,7 +62,7 @@ export async function GET(request: NextRequest) {
 
     if (folderId) {
       console.log('Documents API: Fetching folder details for:', folderId)
-      // Fetch files for specific folder
+      // Fetch files for specific folder with pagination
       const [foldersResponse, filesResponse] = await Promise.allSettled([
         fetch(`${BACKEND_URL}/api/folders/`, {
           method: 'GET',
@@ -56,7 +72,7 @@ export async function GET(request: NextRequest) {
           console.error('Documents API: Failed to fetch folders:', err.message)
           throw err
         }),
-        fetch(`${BACKEND_URL}/api/files/?folder_id=${folderId}`, {
+        fetch(`${BACKEND_URL}/api/files/?folder_id=${folderId}&page=1&limit=25`, {
           method: 'GET',
           headers,
           signal: AbortSignal.timeout(15000)
@@ -67,9 +83,9 @@ export async function GET(request: NextRequest) {
       ])
 
       const result: {
-        folders: any[]
-        files: any[]
-        selectedFolder?: any
+        folders: Folder[]
+        files: File[]
+        selectedFolder?: Folder
         errors?: string[]
       } = {
         folders: [],
@@ -83,7 +99,7 @@ export async function GET(request: NextRequest) {
         try {
           const foldersData = await foldersResponse.value.json()
           result.folders = foldersData
-          result.selectedFolder = foldersData.find((f: any) => f.id === folderId)
+          result.selectedFolder = foldersData.find((f: Folder) => f.id === folderId)
           console.log(`Documents API: Successfully fetched ${result.folders.length} folders`)
         } catch (e) {
           console.error('Documents API: Failed to parse folders data:', e)
@@ -206,10 +222,10 @@ export async function GET(request: NextRequest) {
       // Calculate overall statistics
       const stats = {
         totalFolders: folders.length,
-        totalFiles: folders.reduce((sum: number, folder: any) => sum + (folder.file_count || 0), 0),
-        totalSize: folders.reduce((sum: number, folder: any) => sum + (folder.total_size || 0), 0),
+        totalFiles: folders.reduce((sum: number, folder: Folder) => sum + (folder.file_count || 0), 0),
+        totalSize: folders.reduce((sum: number, folder: Folder) => sum + (folder.total_size || 0), 0),
         averageFilesPerFolder: folders.length > 0 ? 
-          Math.round(folders.reduce((sum: number, folder: any) => sum + (folder.file_count || 0), 0) / folders.length) : 0,
+          Math.round(folders.reduce((sum: number, folder: Folder) => sum + (folder.file_count || 0), 0) / folders.length) : 0,
       }
 
       return NextResponse.json({
@@ -236,10 +252,83 @@ export async function GET(request: NextRequest) {
   }
 }
 
+export async function POST(request: NextRequest) {
+  try {
+    console.log('Documents API POST: Using backend URL:', BACKEND_URL)
+    
+    // Get Supabase session and user
+    const { user } = await updateSession(request)
+    
+    if (!user) {
+      console.log('Documents API POST: No authenticated user found')
+      return NextResponse.json(
+        { error: 'Unauthorized - No authenticated user' },
+        { status: 401 }
+      )
+    }
+
+    console.log('Documents API POST: Authenticated user:', user.email)
+
+    // Create a Supabase client to get the session
+    const supabase = await createClient()
+    
+    // Get the Supabase access token for backend API calls
+    const { data: { session } } = await supabase.auth.getSession()
+    
+    if (!session?.access_token) {
+      console.log('Documents API POST: No access token found')
+      return NextResponse.json(
+        { error: 'Unauthorized - No access token' },
+        { status: 401 }
+      )
+    }
+
+    const headers = {
+      'Authorization': `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json',
+    }
+
+    // Get the request body
+    const body = await request.json()
+    console.log('Documents API POST: Request body:', body)
+
+    // Forward the request to the backend
+    const response = await fetch(`${BACKEND_URL}/api/folders/`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(15000)
+    })
+
+    if (!response.ok) {
+      console.error(`Documents API POST: Backend request failed with status ${response.status}: ${response.statusText}`)
+      const errorText = await response.text()
+      console.error('Documents API POST: Error response body:', errorText)
+      
+      return NextResponse.json(
+        { error: `Failed to create folder (${response.status}: ${response.statusText})` },
+        { status: response.status }
+      )
+    }
+
+    const result = await response.json()
+    console.log('Documents API POST: Successfully created folder')
+    
+    return NextResponse.json(result)
+
+  } catch (error) {
+    console.error('Documents API POST: Unexpected error:', error)
+    return NextResponse.json(
+      { error: `Internal server error: ${error instanceof Error ? error.message : 'Unknown error'}` },
+      { status: 500 }
+    )
+  }
+}
+
 /**
  * Calculate file statistics from files array
  */
-function calculateFileStats(files: any[]) {
+function calculateFileStats(files: File[]): FileStats {
   return files.reduce((stats, file) => {
     stats.total++
     if (file.status === 'completed') {
@@ -258,5 +347,5 @@ function calculateFileStats(files: any[]) {
     processing: 0,
     failed: 0,
     queued: 0
-  })
+  } as FileStats)
 } 

@@ -10,14 +10,15 @@ export const useApi = () => {
   const [error, setError] = useState<string | null>(null)
 
   const fetchFiles = useCallback(async (): Promise<File[]> => {
-    if (!checkAuth()) return []
+    if (!(await checkAuth())) return []
     
     try {
       setLoading(true)
       setError(null)
       
+      const headers = await getAuthHeaders()
       const response = await fetch(`${API_BASE}/files/`, {
-        headers: getAuthHeaders()
+        headers
       })
       
       if (response.ok) {
@@ -39,14 +40,15 @@ export const useApi = () => {
   }, [checkAuth, getAuthHeaders])
 
   const fetchReviews = useCallback(async (): Promise<Review[]> => {
-    if (!checkAuth()) return []
+    if (!(await checkAuth())) return []
     
     try {
       setLoading(true)
       setError(null)
       
+      const headers = await getAuthHeaders()
       const response = await fetch(`${API_BASE}/reviews/`, {
-        headers: getAuthHeaders()
+        headers
       })
       
       if (response.ok) {
@@ -68,11 +70,12 @@ export const useApi = () => {
   }, [checkAuth, getAuthHeaders])
 
   const fetchDetailedReview = useCallback(async (reviewId: string): Promise<Review | null> => {
-    if (!checkAuth()) return null
+    if (!(await checkAuth())) return null
     
     try {
+      const headers = await getAuthHeaders()
       const response = await fetch(`${API_BASE}/reviews/${reviewId}`, {
-        headers: getAuthHeaders()
+        headers
       })
 
       if (response.ok) {
@@ -89,14 +92,15 @@ export const useApi = () => {
     newReview: NewReview,
     selectedFiles: string[]
   ): Promise<Review | null> => {
-    if (!checkAuth()) return null
+    if (!(await checkAuth())) return null
     
     try {
       setError(null)
       
+      const headers = await getAuthHeaders()
       const response = await fetch(`${API_BASE}/reviews/`, {
         method: 'POST',
-        headers: getAuthHeaders(),
+        headers,
         body: JSON.stringify({
           name: newReview.name,
           description: newReview.description,
@@ -128,14 +132,15 @@ export const useApi = () => {
   }, [checkAuth, getAuthHeaders])
 
   const startAnalysis = useCallback(async (reviewId: string): Promise<boolean> => {
-    if (!checkAuth()) return false
+    if (!(await checkAuth())) return false
     
     try {
       setError(null)
       
+      const headers = await getAuthHeaders()
       const response = await fetch(`${API_BASE}/reviews/${reviewId}/analyze`, {
         method: 'POST',
-        headers: getAuthHeaders()
+        headers
       })
 
       if (response.ok) {
@@ -161,14 +166,15 @@ export const useApi = () => {
     reviewId: string,
     newColumn: NewColumn
   ): Promise<boolean> => {
-    if (!checkAuth()) return false
+    if (!(await checkAuth())) return false
     
     try {
       setError(null)
       
+      const headers = await getAuthHeaders()
       const response = await fetch(`${API_BASE}/reviews/${reviewId}/columns`, {
         method: 'POST',
-        headers: getAuthHeaders(),
+        headers,
         body: JSON.stringify({
           column_name: newColumn.column_name,
           prompt: newColumn.prompt,
@@ -194,14 +200,15 @@ export const useApi = () => {
     reviewId: string,
     fileIds: string[]
   ): Promise<boolean> => {
-    if (!checkAuth()) return false
+    if (!(await checkAuth())) return false
     
     try {
       setError(null)
       
+      const headers = await getAuthHeaders()
       const response = await fetch(`${API_BASE}/reviews/${reviewId}/files`, {
         method: 'POST',
-        headers: getAuthHeaders(),
+        headers,
         body: JSON.stringify({
           file_ids: fileIds
         })
@@ -223,8 +230,9 @@ export const useApi = () => {
 
   const fetchDocumentMarkdown = useCallback(async (fileId: string): Promise<string> => {
     try {
+      const headers = await getAuthHeaders()
       const response = await fetch(`${API_BASE}/files/${fileId}/markdown`, {
-        headers: getAuthHeaders()
+        headers
       })
 
       if (response.ok) {

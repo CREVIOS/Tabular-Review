@@ -97,6 +97,7 @@ async def get_folders(current_user = Depends(get_current_user)):
             .order("name")\
             .execute()
         
+        
         # Gracefully handle case where the folders table (or relationship) does not exist yet.
         if hasattr(folders_response, 'error') and folders_response.error:
             error_msg = str(folders_response.error)

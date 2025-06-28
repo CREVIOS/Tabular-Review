@@ -1,0 +1,122 @@
+services:
+  # Production overrides for frontend
+  frontend:
+    build:
+      args:
+        - NEXT_PUBLIC_SUPABASE_URL=${SUPABASE_URL}
+        - NEXT_PUBLIC_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+        - BACKEND_URL=http://backend:8000
+    environment:
+      # Production API URL (when using nginx)
+      - USE_NGINX_PROXY=true
+      - NEXT_PUBLIC_API_URL=http://localhost
+      - NODE_ENV=production
+      - NEXT_TELEMETRY_DISABLED=${NEXT_TELEMETRY_DISABLED}
+
+      # Supabase (for client-side)
+      - NEXT_PUBLIC_SUPABASE_URL=${SUPABASE_URL}
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+    ports:
+      - "3000" # Remove port mapping when using nginx
+
+  # Production overrides for backend
+  backend:
+    environment:
+      # Production environment
+      - ENVIRONMENT=production
+      - DEBUG=false
+      - PORT=${PORT:-8000}
+
+      # Security
+      - SECRET_KEY=${SECRET_KEY}
+      - JWT_SECRET=${JWT_SECRET}
+
+      # Supabase
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+
+      # Redis & Celery
+      - REDIS_URL=${REDIS_URL}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
+
+      # AI Services
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+
+      # Storage
+      - STORAGE_BUCKET=${STORAGE_BUCKET}
+
+      # Performance Settings (production optimized)
+      - MAX_CONCURRENT_EXTRACTIONS=${MAX_CONCURRENT_EXTRACTIONS}
+      - MAX_UPLOAD_SIZE_MB=${MAX_UPLOAD_SIZE_MB}
+      - CHUNK_SIZE_TOKENS=${CHUNK_SIZE_TOKENS}
+      - EMBEDDING_BATCH_SIZE=${EMBEDDING_BATCH_SIZE}
+    ports:
+      - "8000" # Remove port mapping when using nginx
+
+  # Production overrides for celery worker
+  celery-worker:
+    environment:
+      # Production environment
+      - ENVIRONMENT=production
+      - DEBUG=false
+
+      # Security
+      - SECRET_KEY=${SECRET_KEY}
+      - JWT_SECRET=${JWT_SECRET}
+
+      # Supabase
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+
+      # Redis & Celery
+      - REDIS_URL=${REDIS_URL}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
+
+      # AI Services
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+
+      # Storage
+      - STORAGE_BUCKET=${STORAGE_BUCKET}
+
+      # Performance Settings
+      - MAX_CONCURRENT_EXTRACTIONS=${MAX_CONCURRENT_EXTRACTIONS}
+      - MAX_UPLOAD_SIZE_MB=${MAX_UPLOAD_SIZE_MB}
+      - CHUNK_SIZE_TOKENS=${CHUNK_SIZE_TOKENS}
+      - EMBEDDING_BATCH_SIZE=${EMBEDDING_BATCH_SIZE}
+
+  # Production overrides for celery beat (if using scheduler)
+  celery-beat:
+    environment:
+      # Production environment
+      - ENVIRONMENT=production
+      - DEBUG=false
+
+      # Security
+      - SECRET_KEY=${SECRET_KEY}
+      - JWT_SECRET=${JWT_SECRET}
+
+      # Supabase
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+
+      # Redis & Celery
+      - REDIS_URL=${REDIS_URL}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
+
+      # AI Services
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+
+      # Storage
+      - STORAGE_BUCKET=${STORAGE_BUCKET}

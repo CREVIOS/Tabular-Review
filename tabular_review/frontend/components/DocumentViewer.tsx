@@ -110,28 +110,6 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
             </CardContent>
           </Card>
 
-          {/* Document Content - Enhanced for mobile */}
-          <Card className="flex-1">
-            <CardHeader className={isMobile ? 'pb-2 p-4' : 'pb-3'}>
-              <CardTitle className={isMobile ? 'text-base' : 'text-lg'}>Document Content</CardTitle>
-            </CardHeader>
-            <CardContent className={isMobile ? 'p-4 pt-0' : ''}>
-              <div className={`bg-gray-50 rounded-lg border overflow-auto ${isMobile ? 'min-h-[200px] max-h-[300px]' : 'min-h-[300px] max-h-[400px]'}`}>
-                {selectedCell.markdownContent ? (
-                  <pre className={`p-4 text-gray-800 whitespace-pre-wrap font-mono leading-relaxed ${isMobile ? 'text-xs' : 'text-sm'}`}>
-                    {selectedCell.markdownContent}
-                  </pre>
-                ) : (
-                  <div className={`flex items-center justify-center ${isMobile ? 'h-24' : 'h-32'}`}>
-                    <div className="text-center">
-                      <FileText className={`text-gray-400 mx-auto mb-2 ${isMobile ? 'h-6 w-6' : 'h-8 w-8'}`} />
-                      <p className={`text-gray-500 ${isMobile ? 'text-sm' : ''}`}>Loading document content...</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
         </div>
 
         {/* Footer - Enhanced for mobile */}

@@ -29,7 +29,6 @@ if [ ! -f .env ]; then
     echo "   - SUPABASE_URL: Your Supabase project URL"
     echo "   - SUPABASE_SERVICE_ROLE_KEY: Your Supabase service role key"
     echo "   - JWT_SECRET: A secure random string for JWT signing"
-    echo "   - POSTGRES_PASSWORD: A secure password for PostgreSQL"
     echo ""
     read -p "Press Enter to continue after editing .env file..."
 fi
@@ -114,7 +113,7 @@ if [ "$MODE" = "prod" ]; then
         echo "🎯 Production mode enabled"
     fi
 else
-    docker compose up -d redis postgres backend celery-worker frontend
+    docker compose up -d redis backend celery-worker frontend
     echo "🛠️  Development mode enabled"
 fi
 
@@ -123,7 +122,6 @@ echo "⏳ Waiting for services to start..."
 
 # Check core services
 check_service "redis"
-# check_service "postgres"
 check_service "backend"
 check_service "celery-worker"
 check_service "frontend"

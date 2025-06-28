@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { 
   ArrowLeft,
   Files,
@@ -25,6 +25,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { createClient } from '@/lib/supabase/client'
 
 interface File {
   id: string
@@ -63,24 +64,22 @@ export default function FolderDetailView({ folder, onBack, onCreateReview, onVie
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list')
 
-  useEffect(() => {
-    fetchFolderFiles()
-  }, [folder.id])
-
-  const fetchFolderFiles = async () => {
+  const fetchFolderFiles = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
 
-      const token = localStorage.getItem('auth_token')
-      if (!token) {
+      const supabase = createClient()
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      
+      if (sessionError || !session) {
         setError('Authentication required')
         return
       }
 
       const response = await fetch(`http://localhost:8000/api/files/?folder_id=${folder.id}`, {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json'
         }
       })
@@ -97,7 +96,11 @@ export default function FolderDetailView({ folder, onBack, onCreateReview, onVie
     } finally {
       setLoading(false)
     }
-  }
+  }, [folder.id])
+
+  useEffect(() => {
+    fetchFolderFiles()
+  }, [fetchFolderFiles])
 
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 Bytes'

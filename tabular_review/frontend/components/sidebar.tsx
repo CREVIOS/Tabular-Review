@@ -6,12 +6,9 @@ import {
   Upload,
   LogOut,
   User,
-  Sparkles,
   Table,
   Shield,
   FolderOpen,
-  Plus,
-  Activity,
   Menu,
   X,
   ChevronLeft,
@@ -21,10 +18,10 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { auth } from "@/lib/api"
+import { createClient } from "@/lib/supabase/client"
 import { Badge } from "@/components/ui/badge"
-import { FileResponse, TabularReviewResponse }  from "@/types/index"
-import {User as user} from "@/types/types"
+import { File, Review } from "@/types"
+
 
 const sidebarItems = [
   {
@@ -54,20 +51,6 @@ const sidebarItems = [
   },
 ]
 
-const quickActions = [
-  {
-    title: "Create Review",
-    icon: Sparkles,
-    action: "create-review",
-    color: "bg-blue-600 hover:bg-blue-700",
-  },
-  {
-    title: "Upload Files",
-    icon: Plus,
-    action: "upload",
-    color: "bg-green-600 hover:bg-green-700",
-  },
-]
 
 interface SidebarProps {
   className?: string
@@ -173,32 +156,60 @@ export function Sidebar({ className }: SidebarProps) {
   const router = useRouter()
   const pathname = usePathname()
   const { isCollapsed, isMobileOpen, toggleCollapsed, closeMobile } = useSidebar()
-  const [currentUser, setCurrentUser] = React.useState<user | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [currentUser, setCurrentUser] = React.useState<any>(null)
   const [stats, setStats] = React.useState({
     activeReviews: 0,
     processingFiles: 0
   })
 
   React.useEffect(() => {
-    const user = auth.getCurrentUser()
-    console.log('Current user in sidebar:', user)
-    setCurrentUser(user)
+    const supabase = createClient()
     
-    // Fetch quick stats for sidebar
-    fetchQuickStats()
+    // Get current user
+    const getUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      console.log('Current user in sidebar:', user)
+      setCurrentUser(user)
+    }
+    
+    getUser()
+    
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('Auth state changed:', event, session?.user)
+      setCurrentUser(session?.user || null)
+    })
+    
+    return () => subscription.unsubscribe()
   }, [])
 
-  const fetchQuickStats = async () => {
+  // Separate useEffect for fetching stats when user is authenticated
+  React.useEffect(() => {
+    if (currentUser) {
+      fetchQuickStats()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser])
+
+  // Debug: Log when currentUser state changes
+  React.useEffect(() => {
+    console.log('Current user state updated:', currentUser)
+  }, [currentUser])
+
+  const fetchQuickStats = React.useCallback(async () => {
     try {
-      const token = localStorage.getItem('auth_token')
-      if (!token) return
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session?.access_token) return
 
       const [reviewsResponse, filesResponse] = await Promise.all([
         fetch('http://localhost:8000/api/reviews/', {
-          headers: { 'Authorization': `Bearer ${token}` }
+          headers: { 'Authorization': `Bearer ${session.access_token}` }
         }),
         fetch('http://localhost:8000/api/files/', {
-          headers: { 'Authorization': `Bearer ${token}` }
+          headers: { 'Authorization': `Bearer ${session.access_token}` }
         })
       ])
 
@@ -209,32 +220,23 @@ export function Sidebar({ className }: SidebarProps) {
         ])
 
         const reviews = Array.isArray(reviewsData.reviews) ? reviewsData.reviews : (Array.isArray(reviewsData) ? reviewsData : [])
-        const activeReviews = reviews.filter((r: TabularReviewResponse) => r.status === 'processing').length
-        const processingFiles = filesData.filter((f: FileResponse) => f.status === 'processing' || f.status === 'queued').length
+        const activeReviews = reviews.filter((r: Review) => r.status === 'processing').length
+        const processingFiles = filesData.filter((f: File) => f.status === 'processing' || f.status === 'queued').length
 
         setStats({ activeReviews, processingFiles })
       }
     } catch (error) {
       console.error('Failed to fetch sidebar stats:', error)
     }
-  }
+  }, [])
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     console.log('Logging out...')
-    auth.logout()
+    const supabase = createClient()
+    await supabase.auth.signOut()
     router.push('/login')
   }
 
-  const handleQuickAction = (action: string) => {
-    switch (action) {
-      case 'create-review':
-        router.push('/review')
-        break
-      case 'upload':
-        router.push('/upload')
-        break
-    }
-  }
 
   const isActiveRoute = (href: string) => {
     if (href === '/') {
@@ -387,7 +389,7 @@ export function Sidebar({ className }: SidebarProps) {
           </nav>
 
           {/* Quick Actions */}
-          {!isCollapsed && (
+          {/* {!isCollapsed && (
             <div className="px-3 mt-8 space-y-3">
               <div className="px-3 mb-4">
                 <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Quick Actions</h3>
@@ -404,38 +406,8 @@ export function Sidebar({ className }: SidebarProps) {
                 </Button>
               ))}
             </div>
-          )}
-
-          {/* Status Indicator */}
-          {!isCollapsed && (stats.activeReviews > 0 || stats.processingFiles > 0) && (
-            <div className="px-3 mt-6">
-              <div className="p-3 bg-gradient-to-r from-blue-50 to-green-50 border border-blue-200 rounded-xl">
-                <div className="flex items-center gap-2 mb-2">
-                  <Activity className="h-4 w-4 text-blue-600" />
-                  <h4 className="font-semibold text-blue-900 text-sm">System Active</h4>
-                </div>
-                <div className="space-y-1 text-xs">
-                  {stats.activeReviews > 0 && (
-                    <div className="flex items-center justify-between text-blue-700">
-                      <span>Reviews Processing</span>
-                      <Badge variant="secondary" className="bg-blue-100 text-blue-700">
-                        {stats.activeReviews}
-                      </Badge>
-                    </div>
-                  )}
-                  {stats.processingFiles > 0 && (
-                    <div className="flex items-center justify-between text-green-700">
-                      <span>Files Processing</span>
-                      <Badge variant="secondary" className="bg-green-100 text-green-700">
-                        {stats.processingFiles}
-                      </Badge>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+          )} */}
+    </div>
 
         {/* User Section */}
         <div className="border-t border-gray-200 p-4">
@@ -446,7 +418,7 @@ export function Sidebar({ className }: SidebarProps) {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-900 truncate">
-                  {currentUser.full_name || currentUser.email}
+                  {currentUser.user_metadata?.full_name || currentUser.email}
                 </p>
                 <p className="text-xs text-gray-500">Account Active</p>
               </div>

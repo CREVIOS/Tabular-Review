@@ -1,10 +1,11 @@
 "use client"
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Eye, RefreshCw, AlertCircle } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 
 interface FileRecord {
   id: string
@@ -32,29 +33,37 @@ export function FilesTable({ refreshTrigger }: FilesTableProps) {
   const [retryCount, setRetryCount] = useState(0)
   const [isOnline, setIsOnline] = useState(true)
 
-  const fetchFiles = async (showLoading = true) => {
-    try {
-      if (showLoading) {
-        setLoading(true)
-      }
+  const fetchFiles = useCallback(async (isManualRefresh = false) => {
+    if (isManualRefresh) {
       setError(null)
+    }
+    
+    setLoading(true)
+    
+    try {
+      // Check if API server is reachable
+      const healthCheck = await fetch('http://localhost:8000/api/health', { 
+        method: 'GET',
+        signal: AbortSignal.timeout(5000)
+      }).catch(() => null)
       
-      console.log('Fetching files...')
-      
-      // Check API health first (like in dashboard)
-      const healthResponse = await fetch('http://localhost:8000/api/health')
-      const healthy = healthResponse.ok
-      setIsOnline(healthy)
-      
-      if (!healthy) {
+      if (!healthCheck) {
+        setIsOnline(false)
         setError('API server is not responding. Please try again later.')
         return
+      }
+      
+      const supabase = createClient()
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      
+      if (sessionError || !session) {
+        throw new Error('Authentication required')
       }
       
       // Use the correct API URL (matching dashboard)
       const response = await fetch('http://localhost:8000/api/files/', {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+          'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json'
         }
       })
@@ -87,19 +96,25 @@ export function FilesTable({ refreshTrigger }: FilesTableProps) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [setFileList, setLoading, setError, setIsOnline, setRetryCount, retryCount])
 
   useEffect(() => {
     // Check authentication first
-    const token = localStorage.getItem('auth_token')
-    if (!token) {
-      console.log('User not authenticated, redirecting to login')
-      window.location.href = '/login'
-      return
+    const checkAuth = async () => {
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session) {
+        console.log('User not authenticated, redirecting to login')
+        window.location.href = '/login'
+        return
+      }
+      
+      fetchFiles()
     }
     
-    fetchFiles()
-  }, [refreshTrigger])
+    checkAuth()
+  }, [refreshTrigger, fetchFiles])
 
   const handleManualRefresh = () => {
     setRetryCount(0)
@@ -126,10 +141,17 @@ export function FilesTable({ refreshTrigger }: FilesTableProps) {
 
   const viewMarkdown = async (fileId: string) => {
     try {
+      const supabase = createClient()
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      
+      if (sessionError || !session) {
+        throw new Error('Authentication required')
+      }
+      
       // Use the correct API URL (matching dashboard pattern)
       const response = await fetch(`http://localhost:8000/api/files/${fileId}/markdown`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+          'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json'
         }
       })

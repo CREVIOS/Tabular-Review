@@ -23,6 +23,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { createClient } from '@/lib/supabase/client'
 
 interface Folder {
   id: string
@@ -117,13 +118,17 @@ export default function EnhancedCreateReview({
   const fetchFolders = async () => {
     try {
       setLoadingFolders(true)
-      const token = localStorage.getItem('auth_token')
+      const supabase = createClient()
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
       
-      if (!token) return
+      if (sessionError || !session) {
+        console.error('No authentication session found')
+        return
+      }
 
       const response = await fetch('http://localhost:8000/api/folders/', {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json'
         }
       })
@@ -142,13 +147,17 @@ export default function EnhancedCreateReview({
   const fetchFiles = async () => {
     try {
       setLoadingFiles(true)
-      const token = localStorage.getItem('auth_token')
+      const supabase = createClient()
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
       
-      if (!token) return
+      if (sessionError || !session) {
+        console.error('No authentication session found')
+        return
+      }
 
       const response = await fetch('http://localhost:8000/api/files/', {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json'
         }
       })
@@ -259,8 +268,10 @@ export default function EnhancedCreateReview({
     setLoading(true)
 
     try {
-      const token = localStorage.getItem('auth_token')
-      if (!token) {
+      const supabase = createClient()
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      
+      if (sessionError || !session) {
         throw new Error('Authentication required')
       }
 
@@ -290,7 +301,7 @@ export default function EnhancedCreateReview({
       const response = await fetch('http://localhost:8000/api/reviews/', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify(submitData)
@@ -941,27 +952,6 @@ export default function EnhancedCreateReview({
                   </div>
                 </div>
 
-                {/* Expected Results */}
-                <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-xl p-6">
-                  <h4 className="font-bold text-purple-900 mb-4 flex items-center gap-2">
-                    <Wand2 className="h-5 w-5" />
-                    What Happens Next?
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center text-white font-bold text-sm">1</div>
-                      <span className="text-purple-800 text-sm font-medium">AI analyzes documents</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center text-white font-bold text-sm">2</div>
-                      <span className="text-purple-800 text-sm font-medium">Extracts structured data</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center text-white font-bold text-sm">3</div>
-                      <span className="text-purple-800 text-sm font-medium">Real-time results table</span>
-                    </div>
-                  </div>
-                </div>
               </div>
             )}
 

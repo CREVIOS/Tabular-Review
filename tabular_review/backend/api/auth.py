@@ -10,12 +10,21 @@ router = APIRouter()
 security = HTTPBearer()
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    """Get current user from JWT token and custom users table"""
+    """Get current user from Supabase JWT token and custom users table"""
     try:
         print(f"Token received: {credentials.credentials[:20]}...")
         
-        # Verify custom JWT token
-        user_id = verify_token(credentials.credentials)
+        # Verify Supabase JWT token
+        user_data = verify_token(credentials.credentials)
+        if not user_data:
+            print("Token verification failed")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token",
+                headers={"WWW-Authenticate": "Bearer"}
+            )
+        
+        user_id = user_data["id"]
         print(f"Token verified for user_id: {user_id}")
         
         # Get user from custom users table (NOT auth.users)
@@ -26,7 +35,8 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             print(f"User not found in users table: {user_id}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User profile not found"
+                detail="User profile not found",
+                headers={"WWW-Authenticate": "Bearer"}
             )
         
         user_data = user_response.data[0]
@@ -42,12 +52,15 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         return AuthenticatedUser(user_data)
         
     except HTTPException:
+        # Re-raise HTTP exceptions as-is (they contain proper status codes)
         raise
     except Exception as e:
         print(f"Authentication error: {str(e)}")
+        # Return a proper 401 response for any other authentication error
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials"
+            detail="Authentication failed",
+            headers={"WWW-Authenticate": "Bearer"}
         )
 
 @router.post("/register", response_model=Token)

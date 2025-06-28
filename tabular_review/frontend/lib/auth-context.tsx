@@ -2,7 +2,8 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
-import { auth, api } from './api'
+import { createClient } from '@/lib/supabase/client'
+import type { User as SupabaseUser, Session } from '@supabase/supabase-js'
 
 // Types
 interface User {
@@ -65,133 +66,148 @@ export const useAuth = () => {
   return context
 }
 
-// Secure token management
-class SecureTokenManager {
-  private static readonly TOKEN_KEY = 'auth_token'
-  private static readonly USER_KEY = 'user_data'
-  private static readonly EXPIRY_KEY = 'token_expiry'
-  private static readonly ACTIVITY_KEY = 'last_activity'
-
-  static setToken(token: string, expiresIn: number = 86400): void {
-    if (typeof window === 'undefined') return
-    
-    try {
-      const expiry = new Date(Date.now() + (expiresIn * 1000))
-      
-      localStorage.setItem(this.TOKEN_KEY, token)
-      localStorage.setItem(this.EXPIRY_KEY, expiry.toISOString())
-      localStorage.setItem(this.ACTIVITY_KEY, new Date().toISOString())
-      
-      // Set secure cookie for production (HTTPS) or any cookie for development
-      const isProduction = process.env.NODE_ENV === 'production'
-      const isHttps = window.location.protocol === 'https:'
-      
-      if (isHttps || !isProduction) {
-        const cookieOptions = isHttps 
-          ? `${this.TOKEN_KEY}=${token}; path=/; secure; samesite=strict; max-age=${expiresIn}`
-          : `${this.TOKEN_KEY}=${token}; path=/; samesite=strict; max-age=${expiresIn}`
-        
-        document.cookie = cookieOptions
-      }
-    } catch (error) {
-      console.error('Failed to store token:', error)
-    }
+// Convert Supabase user to our User interface
+const convertSupabaseUser = (supabaseUser: SupabaseUser): User => {
+  return {
+    id: supabaseUser.id,
+    email: supabaseUser.email || '',
+    full_name: supabaseUser.user_metadata?.full_name || supabaseUser.user_metadata?.name,
+    is_active: true, // Supabase users are active by default
+    created_at: supabaseUser.created_at,
+    last_login: supabaseUser.last_sign_in_at || undefined
   }
+}
 
-  static getToken(): string | null {
-    if (typeof window === 'undefined') return null
-    
+// Supabase session management
+class SupabaseSessionManager {
+  private static supabase = createClient()
+
+  static async getSession(): Promise<Session | null> {
     try {
-      const token = localStorage.getItem(this.TOKEN_KEY)
-      const expiry = localStorage.getItem(this.EXPIRY_KEY)
-      
-      if (!token || !expiry) return null
-      
-      if (new Date() > new Date(expiry)) {
-        this.clearToken()
+      const { data: { session }, error } = await this.supabase.auth.getSession()
+      if (error) {
+        console.error('Error getting session:', error)
         return null
       }
-      
-      return token
+      return session
     } catch (error) {
-      console.error('Failed to retrieve token:', error)
+      console.error('Failed to get session:', error)
       return null
     }
   }
 
-  static isTokenValid(): boolean {
-    const token = this.getToken()
-    return !!token
-  }
-
-  static getTokenExpiry(): Date | null {
-    if (typeof window === 'undefined') return null
-    
+  static async getUser(): Promise<User | null> {
     try {
-      const expiry = localStorage.getItem(this.EXPIRY_KEY)
-      return expiry ? new Date(expiry) : null
+      const { data: { user }, error } = await this.supabase.auth.getUser()
+      if (error || !user) {
+        return null
+      }
+      return convertSupabaseUser(user)
     } catch (error) {
-      return error instanceof Error ? null : null
-    }
-  }
-
-  static clearToken(): void {
-    if (typeof window === 'undefined') return
-    
-    try {
-      localStorage.removeItem(this.TOKEN_KEY)
-      localStorage.removeItem(this.USER_KEY)
-      localStorage.removeItem(this.EXPIRY_KEY)
-      localStorage.removeItem(this.ACTIVITY_KEY)
-      
-      // Clear cookie
-      document.cookie = `${this.TOKEN_KEY}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`
-    } catch (error) {
-      console.error('Failed to clear token:', error)
-    }
-  }
-
-  static updateActivity(): void {
-    if (typeof window === 'undefined') return
-    
-    try {
-      localStorage.setItem(this.ACTIVITY_KEY, new Date().toISOString())
-    } catch (error) {
-      console.error('Failed to update activity:', error)
-    }
-  }
-
-  static getLastActivity(): Date | null {
-    if (typeof window === 'undefined') return null
-    
-    try {
-      const activity = localStorage.getItem(this.ACTIVITY_KEY)
-      return activity ? new Date(activity) : null
-    } catch (error) {
-      return error instanceof Error ? null : null
-    }
-  }
-
-  static setUser(user: User): void {
-    if (typeof window === 'undefined') return
-    
-    try {
-      localStorage.setItem(this.USER_KEY, JSON.stringify(user))
-    } catch (error) {
-      console.error('Failed to store user data:', error)
-    }
-  }
-
-  static getUser(): User | null {
-    if (typeof window === 'undefined') return null
-    
-    try {
-      const userData = localStorage.getItem(this.USER_KEY)
-      return userData ? JSON.parse(userData) : null
-    } catch (error) {
-      console.error('Failed to retrieve user data:', error)
+      console.error('Failed to get user:', error)
       return null
     }
+  }
+
+  static async signIn(email: string, password: string): Promise<{ user: User; session: Session }> {
+    const { data, error } = await this.supabase.auth.signInWithPassword({
+      email,
+      password
+    })
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    if (!data.user || !data.session) {
+      throw new Error('Login failed - no user or session returned')
+    }
+
+    return {
+      user: convertSupabaseUser(data.user),
+      session: data.session
+    }
+  }
+
+  static async signUp(email: string, password: string, fullName?: string): Promise<{ user: User; session: Session }> {
+    console.log('SupabaseSessionManager: Attempting sign up for:', email)
+    
+    const { data, error } = await this.supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          full_name: fullName
+        }
+      }
+    })
+
+    console.log('SupabaseSessionManager: Sign up response:', {
+      hasUser: !!data.user,
+      hasSession: !!data.session,
+      userEmail: data.user?.email,
+      userConfirmed: data.user?.email_confirmed_at ? 'confirmed' : 'pending',
+      error: error?.message
+    })
+
+    if (error) {
+      console.error('SupabaseSessionManager: Sign up error:', error)
+      throw new Error(error.message)
+    }
+
+    if (!data.user) {
+      throw new Error('Registration failed - no user returned')
+    }
+
+    // Convert the user
+    const user = convertSupabaseUser(data.user)
+
+    // Handle email confirmation flow
+    if (!data.session) {
+      console.log('SupabaseSessionManager: Email confirmation required for:', email)
+      // Return user but no session - this indicates email confirmation is needed
+      // We'll create a minimal session object to satisfy the type, but it won't be used
+      const placeholderSession: Session = {
+        access_token: '',
+        refresh_token: '',
+        expires_in: 0,
+        expires_at: 0,
+        token_type: 'bearer',
+        user: data.user
+      }
+      return { user, session: placeholderSession }
+    }
+
+    console.log('SupabaseSessionManager: Immediate session created for:', email)
+    return {
+      user,
+      session: data.session
+    }
+  }
+
+  static async signOut(): Promise<void> {
+    const { error } = await this.supabase.auth.signOut()
+    if (error) {
+      console.error('Error signing out:', error)
+    }
+  }
+
+  static async refreshSession(): Promise<Session | null> {
+    try {
+      const { data, error } = await this.supabase.auth.refreshSession()
+      if (error) {
+        console.error('Error refreshing session:', error)
+        return null
+      }
+      return data.session
+    } catch (error) {
+      console.error('Failed to refresh session:', error)
+      return null
+    }
+  }
+
+  static onAuthStateChange(callback: (event: string, session: Session | null) => void) {
+    return this.supabase.auth.onAuthStateChange(callback)
   }
 }
 
@@ -223,41 +239,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Update user activity
   const updateActivity = useCallback(() => {
     const now = new Date()
-    SecureTokenManager.updateActivity()
     setAuthState(prev => ({ ...prev, lastActivity: now }))
   }, [])
 
   // Validate session - more resilient version
   const validateSession = useCallback(async (): Promise<boolean> => {
     try {
-      if (!SecureTokenManager.isTokenValid()) {
+      const session = await SupabaseSessionManager.getSession()
+      if (!session) {
         return false
       }
 
-      const lastActivity = SecureTokenManager.getLastActivity()
-      if (lastActivity) {
-        const timeSinceActivity = Date.now() - lastActivity.getTime()
-        if (timeSinceActivity > SECURITY_CONFIG.MAX_IDLE_TIME) {
-          console.log('Session expired due to inactivity')
-          return false
-        }
+      const user = await SupabaseSessionManager.getUser()
+      if (user) {
+        setAuthState(prev => ({
+          ...prev,
+          user,
+          isAuthenticated: true,
+          lastActivity: new Date(),
+          sessionExpiry: session.expires_at ? new Date(session.expires_at) : null
+        }))
+        return true
       }
 
-      // Try to verify token with server, but don't fail if endpoint doesn't exist
-      try {
-        const response = await api.get('/api/auth/verify')
-        return response.status === 200
-      } catch (error: unknown) {
-        // If the verify endpoint doesn't exist (404), but we have a valid token locally, continue
-        if (error && typeof error === 'object' && 'response' in error && 
-            error.response && typeof error.response === 'object' && 'status' in error.response && 
-            error.response.status === 404) {
-          console.warn('Token verification endpoint not available, using local validation')
-          return true // Continue with local token validation
-        }
-        console.error('Session validation failed:', error)
-        return false
-      }
+      return false
     } catch (error) {
       console.error('Session validation failed:', error)
       return false
@@ -267,50 +272,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Check authentication status
   const checkAuth = useCallback(async (): Promise<boolean> => {
     try {
-      const token = SecureTokenManager.getToken()
-      if (!token) {
-        return false
-      }
-
       const isValid = await validateSession()
       if (!isValid) {
-        SecureTokenManager.clearToken()
+        await SupabaseSessionManager.signOut()
         return false
       }
 
-      const user = SecureTokenManager.getUser()
-      if (user) {
-        setAuthState(prev => ({
-          ...prev,
-          user,
-          isAuthenticated: true,
-          lastActivity: SecureTokenManager.getLastActivity(),
-          sessionExpiry: SecureTokenManager.getTokenExpiry()
-        }))
-        return true
-      }
-
-      return false
+      return true
     } catch (error) {
       console.error('Auth check failed:', error)
       return false
     }
   }, [validateSession])
 
-    // Logout function - graceful handling of missing endpoint
-  const logout = useCallback(() => {
+  // Logout function
+  const logout = useCallback(async () => {
     try {
-      // Try to call logout API, but don't fail if it doesn't exist
-      api.post('/api/auth/logout').catch(err => {
-        // Only log error if it's not a 404 (missing endpoint)
-        if (err.response?.status !== 404) {
-          console.error('Logout API call failed:', err)
-        }
-      })
-    } catch (error) {
-      console.error('Logout error:', error)
-    } finally {
-      SecureTokenManager.clearToken()
+      await SupabaseSessionManager.signOut()
       setAuthState({
         user: null,
         isAuthenticated: false,
@@ -319,33 +297,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         sessionExpiry: null
       })
       router.push('/login')
+    } catch (error) {
+      console.error('Logout error:', error)
     }
   }, [router])
 
   // Refresh authentication - with fallback for missing endpoint
   const refreshAuth = useCallback(async () => {
     try {
-      const response = await api.post('/api/auth/refresh')
-      const { access_token, user, expires_in } = response.data
-      
-      SecureTokenManager.setToken(access_token, expires_in)
-      SecureTokenManager.setUser(user)
-      
-      setAuthState(prev => ({
-        ...prev,
-        user,
-        isAuthenticated: true,
-        lastActivity: new Date(),
-        sessionExpiry: SecureTokenManager.getTokenExpiry()
-      }))
-    } catch (error: unknown) {
-      console.error('Token refresh failed:', error)
-      // If refresh endpoint doesn't exist, just log the user out
-      if (error && typeof error === 'object' && 'response' in error && 
-          error.response && typeof error.response === 'object' && 'status' in error.response &&
-          error.response.status === 404) {
+      const session = await SupabaseSessionManager.refreshSession()
+      if (session) {
+        setAuthState(prev => ({
+          ...prev,
+          isAuthenticated: true,
+          lastActivity: new Date(),
+          sessionExpiry: session.expires_at ? new Date(session.expires_at) : null
+        }))
+      } else {
         console.warn('Token refresh endpoint not available')
       }
+    } catch (error: unknown) {
+      console.error('Token refresh failed:', error)
       logout()
     }
   }, [logout])
@@ -353,18 +325,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Login function
   const login = useCallback(async (email: string, password: string) => {
     try {
-      const response = await auth.login(email, password)
-      const { access_token, user, expires_in = 86400 } = response
-      
-      SecureTokenManager.setToken(access_token, expires_in)
-      SecureTokenManager.setUser(user)
-      
+      const { user, session } = await SupabaseSessionManager.signIn(email, password)
       setAuthState({
         user,
         isAuthenticated: true,
         isLoading: false,
         lastActivity: new Date(),
-        sessionExpiry: SecureTokenManager.getTokenExpiry()
+        sessionExpiry: session.expires_at ? new Date(session.expires_at) : null
       })
       
       // Redirect to intended page or dashboard
@@ -380,23 +347,57 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Register function
   const register = useCallback(async (email: string, password: string, fullName?: string) => {
     try {
-      const response = await auth.register(email, password, fullName)
-      const { access_token, user, expires_in = 86400 } = response
+      console.log('Auth Context: Starting registration process...')
       
-      SecureTokenManager.setToken(access_token, expires_in)
-      SecureTokenManager.setUser(user)
+      const { user, session } = await SupabaseSessionManager.signUp(email, password, fullName)
       
+      console.log('Auth Context: Registration response:', { 
+        hasUser: !!user, 
+        hasSession: !!session,
+        hasAccessToken: !!session?.access_token,
+        userEmail: user?.email,
+        emailConfirmed: session?.access_token ? 'session_exists' : 'email_confirmation_required'
+      })
+      
+      // Handle Supabase email confirmation flow
+      // Check for access_token instead of session existence since we return a placeholder
+      if (!session?.access_token) {
+        // Email confirmation required - this is normal for Supabase
+        console.log('Auth Context: Email confirmation required - not setting auth state yet')
+        // Don't set auth state until email is confirmed
+        // The user will need to click the email link and then sign in
+        return
+      }
+      
+      // If we have a real session with access token, set the auth state (immediate confirmation case)
       setAuthState({
         user,
         isAuthenticated: true,
         isLoading: false,
         lastActivity: new Date(),
-        sessionExpiry: SecureTokenManager.getTokenExpiry()
+        sessionExpiry: session.expires_at ? new Date(session.expires_at) : null
       })
       
+      console.log('Auth Context: Registration complete with immediate session')
       router.push('/')
+      
     } catch (error) {
-      console.error('Registration failed:', error)
+      console.error('Auth Context: Registration failed:', error)
+      
+      // Enhanced error handling
+      if (error instanceof Error) {
+        // Handle specific Supabase registration errors
+        if (error.message?.includes('User already registered')) {
+          throw new Error('An account with this email already exists. Please sign in instead.')
+        } else if (error.message?.includes('Invalid email')) {
+          throw new Error('Please enter a valid email address.')
+        } else if (error.message?.includes('Password should be at least')) {
+          throw new Error('Password does not meet security requirements. Please choose a stronger password.')
+        } else if (error.message?.includes('Signup not allowed')) {
+          throw new Error('Registration is currently disabled. Please contact support.')
+        }
+      }
+      
       throw error
     }
   }, [router])

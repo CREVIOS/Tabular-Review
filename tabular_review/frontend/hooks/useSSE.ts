@@ -1,6 +1,6 @@
 import { useRef, useCallback, useState } from 'react'
 import { SSEMessage, Review, RealTimeUpdates } from '../types'
-import { useAuth } from './useAuth'
+import { createClient } from '@/lib/supabase/client'
 
 const API_BASE = 'http://localhost:8000/api'
 
@@ -25,10 +25,37 @@ export const useSSE = ({
   selectedReview,
   fetchDetailedReview
 }: UseSSEProps) => {
-  const { getAuthToken, getAuthHeaders, checkAuth } = useAuth()
   const [isConnectedToSSE, setIsConnectedToSSE] = useState(false)
   const [isUsingPolling, setIsUsingPolling] = useState(false)
   const eventSourceRef = useRef<EventSource | { close: () => void; _isPolling?: boolean } | null>(null)
+
+  const getAuthToken = useCallback(async () => {
+    try {
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      return session?.access_token || null
+    } catch (error) {
+      console.error('Failed to get auth token:', error)
+      return null
+    }
+  }, [])
+
+  const getAuthHeaders = useCallback(async () => {
+    const token = await getAuthToken()
+    return {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    }
+  }, [getAuthToken])
+
+  const checkAuth = useCallback(async () => {
+    const token = await getAuthToken()
+    if (!token) {
+      window.location.href = '/login'
+      return false
+    }
+    return true
+  }, [getAuthToken])
 
   const handleSSEMessage = useCallback((data: SSEMessage) => {
     console.log('SSE message received:', data)
@@ -165,8 +192,9 @@ export const useSSE = ({
     
     const pollInterval = setInterval(async () => {
       try {
+        const headers = await getAuthHeaders()
         const response = await fetch(`${API_BASE}/reviews/${reviewId}/status`, {
-          headers: getAuthHeaders()
+          headers
         })
 
         if (response.ok) {
@@ -220,14 +248,14 @@ export const useSSE = ({
     }
   }, [getAuthHeaders, setSelectedReview, setReviews, fetchDetailedReview, handleSSEMessage])
 
-  const connectToSSE = useCallback((reviewId: string) => {
-    if (!checkAuth()) return
+  const connectToSSE = useCallback(async (reviewId: string) => {
+    if (!(await checkAuth())) return
     
     if (eventSourceRef.current) {
       eventSourceRef.current.close()
     }
 
-    const token = getAuthToken()
+    const token = await getAuthToken()
     if (!token) return
     
     const url = `${API_BASE}/reviews/${reviewId}/stream?token=${encodeURIComponent(token)}`

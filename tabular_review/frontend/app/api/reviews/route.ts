@@ -1,4 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { updateSession } from "@/lib/supabase/middleware"
+import { File, Folder } from '@/types/documents'
+import { Review } from '@/types'
+import { createClient } from '@/lib/supabase/server'
 
 // Handle both development and production backend URLs
 const getBackendUrl = () => {
@@ -19,24 +23,35 @@ export async function GET(request: NextRequest) {
     console.log('Reviews API: Using backend URL:', BACKEND_URL)
     console.log('Reviews API: Environment:', process.env.NODE_ENV)
     
-    // Get the authorization token from cookies or headers
-    const token = request.cookies.get('auth_token')?.value || 
-                  request.headers.get('Authorization')?.replace('Bearer ', '')
-
-    if (!token) {
-      console.log('Reviews API: No auth token found')
-      console.log('Reviews API: Available cookies:', Object.fromEntries(request.cookies.getAll().map(c => [c.name, c.value])))
-      console.log('Reviews API: Authorization header:', request.headers.get('Authorization'))
+    // Get Supabase session and user
+    const { user } = await updateSession(request)
+    
+    if (!user) {
+      console.log('Reviews API: No authenticated user found')
       return NextResponse.json(
-        { error: 'Unauthorized - No token provided' },
+        { error: 'Unauthorized - No authenticated user' },
         { status: 401 }
       )
     }
 
-    console.log('Reviews API: Using auth token:', token.substring(0, 20) + '...')
+    console.log('Reviews API: Authenticated user:', user.email)
+
+    // Create a Supabase client to get the session
+    const supabase = await createClient()
+    
+    // Get the Supabase access token for backend API calls
+    const { data: { session } } = await supabase.auth.getSession()
+    
+    if (!session?.access_token) {
+      console.log('Reviews API: No access token found')
+      return NextResponse.json(
+        { error: 'Unauthorized - No access token' },
+        { status: 401 }
+      )
+    }
 
     const headers = {
-      'Authorization': `Bearer ${token}`,
+      'Authorization': `Bearer ${session.access_token}`,
       'Content-Type': 'application/json',
     }
 
@@ -93,13 +108,13 @@ export async function GET(request: NextRequest) {
       }),
       
       // Fetch files
-      fetch(`${BACKEND_URL}/api/files/`, {
+      fetch(`${BACKEND_URL}/api/files/?page=1&limit=25`, {
         method: 'GET',
         headers,
         signal: AbortSignal.timeout(15000) // 15 second timeout
       }).catch(err => {
         console.error('Reviews API: Failed to fetch files:', err.message)
-        console.error('Reviews API: Files URL:', `${BACKEND_URL}/api/files/`)
+        console.error('Reviews API: Files URL:', `${BACKEND_URL}/api/files/?page=1&limit=25`)
         throw err
       }),
       
@@ -117,9 +132,9 @@ export async function GET(request: NextRequest) {
 
     // Process responses and handle errors
     const result: {
-      reviews: any[]
-      files: any[]
-      folders: any[]
+      reviews: Review[]
+      files: File[]
+      folders: Folder[]
       errors?: string[]
     } = {
       reviews: [],
@@ -280,7 +295,7 @@ export async function GET(request: NextRequest) {
 /**
  * Calculate review statistics from reviews array
  */
-function calculateReviewStats(reviews: any[]) {
+function calculateReviewStats(reviews: Review[]) {
   const total = reviews.length
   const completed = reviews.filter(r => r.status === 'completed').length
   const processing = reviews.filter(r => r.status === 'processing').length
@@ -308,7 +323,7 @@ function calculateReviewStats(reviews: any[]) {
 /**
  * Calculate folder statistics from folders array
  */
-function calculateFolderStats(folders: any[]) {
+function calculateFolderStats(folders: Folder[]) {
   const totalFolders = folders.length
   const totalFilesInFolders = folders.reduce((sum, f) => sum + (f.file_count || 0), 0)
   const averageFilesPerFolder = totalFolders > 0 ? 

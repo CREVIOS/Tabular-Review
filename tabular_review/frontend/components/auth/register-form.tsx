@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Eye, EyeOff, User, Mail, Lock, Shield, CheckCircle, AlertCircle, Loader2 } from "lucide-react"
+import { Eye, EyeOff, User, Mail, Lock, Shield, CheckCircle, AlertCircle, Loader2, MailCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -29,8 +29,10 @@ export function RegisterForm() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState("")
+  const [success, setSuccess] = useState("")
   const [agreedToTerms, setAgreedToTerms] = useState(false)
   const [agreedToPrivacy, setAgreedToPrivacy] = useState(false)
+  const [registrationComplete, setRegistrationComplete] = useState(false)
 
   // Password strength requirements
   const passwordRequirements: PasswordRequirement[] = [
@@ -133,6 +135,9 @@ export function RegisterForm() {
     if (error) {
       setError("")
     }
+    if (success) {
+      setSuccess("")
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -144,29 +149,52 @@ export function RegisterForm() {
 
     setIsSubmitting(true)
     setError("")
+    setSuccess("")
 
     try {
+      console.log('Attempting registration with:', {
+        email: formData.email.trim().toLowerCase(),
+        fullName: formData.fullName.trim(),
+        hasPassword: !!formData.password
+      })
+
       await register(
         formData.email.trim().toLowerCase(),
         formData.password,
         formData.fullName.trim()
       )
 
-      // Registration successful - the auth context will handle redirect
+      // Registration successful
+      setRegistrationComplete(true)
+      setSuccess("Registration successful! Please check your email to verify your account before signing in.")
+      
+      // Clear form data
+      setFormData({
+        fullName: "",
+        email: "",
+        password: "",
+        confirmPassword: ""
+      })
+
     } catch (error: Error | unknown) {
       console.error("Registration error:", error)
       const errorMessage = handleApiError(error)
-      setError(errorMessage)
       
       // Add specific handling for common registration errors
       if (error instanceof Error && error.message) {
-        if (error.message?.includes('Email already exists')) {
+        if (error.message?.includes('User already registered')) {
           setError("An account with this email already exists. Please try logging in instead.")
         } else if (error.message?.includes('Invalid email')) {
           setError("Please enter a valid email address.")
-        } else if (error.message?.includes('Weak password')) {
+        } else if (error.message?.includes('Weak password') || error.message?.includes('Password should be at least')) {
           setError("Password does not meet security requirements. Please choose a stronger password.")
+        } else if (error.message?.includes('Email not confirmed')) {
+          setError("Please check your email and click the confirmation link before trying to sign in.")
+        } else {
+          setError(errorMessage)
         }
+      } else {
+        setError(errorMessage)
       }
     } finally {
       setIsSubmitting(false)
@@ -187,6 +215,51 @@ export function RegisterForm() {
     return "Strong"
   }
 
+  // If registration is complete, show success message
+  if (registrationComplete) {
+    return (
+      <div className="space-y-6 text-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="p-3 bg-green-100 rounded-full">
+            <MailCheck className="h-8 w-8 text-green-600" />
+          </div>
+          <h3 className="text-xl font-semibold text-gray-900">Check Your Email!</h3>
+          <p className="text-gray-600 max-w-md">
+            We&apos;ve sent a confirmation link to <strong>{formData.email}</strong>. 
+            Please check your email and click the link to verify your account.
+          </p>
+        </div>
+
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            <strong>Important:</strong> You must verify your email before you can sign in. 
+            Check your spam folder if you don&apos;t see the email within a few minutes.
+          </AlertDescription>
+        </Alert>
+
+        <div className="space-y-3">
+          <Button
+            onClick={() => {
+              setRegistrationComplete(false)
+              setSuccess("")
+            }}
+            variant="outline"
+            className="w-full"
+          >
+            Register Another Account
+          </Button>
+          
+          <Link href="/login">
+            <Button className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800">
+              Go to Sign In
+            </Button>
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* Form Header */}
@@ -199,6 +272,14 @@ export function RegisterForm() {
           All information is encrypted and securely stored
         </p>
       </div>
+
+      {/* Success Alert */}
+      {success && (
+        <Alert className="border-green-200 bg-green-50">
+          <CheckCircle className="h-4 w-4 text-green-600" />
+          <AlertDescription className="text-green-800">{success}</AlertDescription>
+        </Alert>
+      )}
 
       {/* Error Alert */}
       {error && (

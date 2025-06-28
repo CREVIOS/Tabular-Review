@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { IconCloudUpload, IconX } from '@tabler/icons-react'
 import { Folder, Files } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 
 interface Folder {
   id: string
@@ -47,16 +48,17 @@ export default function FileUploadWithFolders({
   const fetchFolders = async () => {
     try {
       setLoadingFolders(true)
-      const token = localStorage.getItem('auth_token')
+      const supabase = createClient()
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
       
-      if (!token) {
+      if (sessionError || !session) {
         setError('Authentication required')
         return
       }
 
       const response = await fetch('http://localhost:8000/api/folders/', {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json'
         }
       })
@@ -141,9 +143,11 @@ export default function FileUploadWithFolders({
       console.log('Starting upload:', selectedFiles.map(f => ({ name: f.name, type: f.type, size: f.size })))
       console.log('Target folder:', currentFolderId)
       
-      const token = localStorage.getItem('auth_token')
-      if (!token) {
-        throw new Error('Authentication token not found')
+      const supabase = createClient()
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      
+      if (sessionError || !session) {
+        throw new Error('Authentication required')
       }
 
       // Create FormData and append files
@@ -160,7 +164,7 @@ export default function FileUploadWithFolders({
       const response = await fetch('http://localhost:8000/api/files/upload', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${session.access_token}`
           // Don't set Content-Type header - let browser set it with boundary for FormData
         },
         body: formData

@@ -1,7 +1,33 @@
 import axios from 'axios'
 import type { InternalAxiosRequestConfig, AxiosResponse, AxiosError } from 'axios'
+import { createClient } from '@/lib/supabase/client'
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+// Get the appropriate API base URL
+const getApiBaseUrl = () => {
+  // Check if we're running in a browser
+  if (typeof window !== 'undefined') {
+    // In production, use relative URLs
+    if (process.env.NODE_ENV === 'production') {
+      return ''  // Empty string for relative URLs
+    }
+    
+    // In development, check if we're in Docker
+    if (window.location.hostname === 'frontend') {
+      return 'http://backend:8000'
+    }
+    
+    // Default to localhost for local development
+    return 'http://localhost:8000'
+  }
+  
+  // Server-side rendering - use environment variable or default
+  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+}
+
+// Use the dynamic API base URL
+const API_BASE_URL = getApiBaseUrl()
+
+console.log('API_BASE_URL:', API_BASE_URL)
 
 // Security configuration
 const SECURITY_CONFIG = {
@@ -92,7 +118,7 @@ const getSecurityHeaders = () => ({
   'X-Frame-Options': 'DENY',
   'X-XSS-Protection': '1; mode=block',
   'Referrer-Policy': 'strict-origin-when-cross-origin',
-  'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self' http://localhost:8000 https://localhost:8000 https://api.example.com;",
+  // 'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self' http://localhost:8000 https://localhost:8000 http://backend:8000 https://backend:8000 ws://localhost:8000 wss://localhost:8000 ws://backend:8000 wss://backend:8000;",
   'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
   'Permissions-Policy': 'camera=(), microphone=(), geolocation=()'
 })
@@ -110,7 +136,7 @@ export const api = axios.create({
 
 // Request interceptor with security enhancements
 api.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
+  async (config: InternalAxiosRequestConfig) => {
     if (typeof window === 'undefined') {
       return config
     }
@@ -136,16 +162,15 @@ api.interceptors.request.use(
     // Add timestamp
     config.headers['X-Timestamp'] = Date.now().toString()
 
-    // Get and validate token
-    const token = localStorage.getItem('auth_token')
-    if (token) {
-      // Validate token format (basic check)
-      if (token.split('.').length === 3 || token.length > 10) {
-      config.headers.Authorization = `Bearer ${token}`
-      } else {
-        console.warn('Invalid token format detected')
-        localStorage.removeItem('auth_token')
+    // Get Supabase session token
+    try {
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.access_token) {
+        config.headers.Authorization = `Bearer ${session.access_token}`
       }
+    } catch (error) {
+      console.warn('Failed to get Supabase session token:', error)
     }
 
     // Sanitize request data
@@ -215,12 +240,6 @@ api.interceptors.response.use(
     // Handle authentication errors
     if (status === 401 || status === 403) {
       if (typeof window !== 'undefined') {
-        // Clear all auth data
-        localStorage.removeItem('auth_token')
-        localStorage.removeItem('user_data')
-        localStorage.removeItem('token_expiry')
-        localStorage.removeItem('last_activity')
-        
         // Clear any auth cookies
         document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
         
@@ -268,6 +287,9 @@ api.interceptors.response.use(
 
 // Enhanced authentication helpers with security
 export const auth = {
+  // Note: Authentication is now handled by Supabase
+  // These methods are kept for compatibility but delegate to Supabase
+  
   login: async (email: string, password: string) => {
     try {
       // Validate inputs
@@ -279,27 +301,17 @@ export const auth = {
         throw new Error('Invalid email format')
       }
 
-      const response = await api.post('/api/auth/login', { 
+      // Use Supabase for authentication
+      const supabase = createClient()
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim().toLowerCase(),
         password: password.trim()
       })
-      
-      const data = response.data
-      
-      if (typeof window !== 'undefined' && data.access_token) {
-        // Store token securely
-        localStorage.setItem('auth_token', data.access_token)
-        localStorage.setItem('user_data', JSON.stringify(data.user))
-        
-        if (data.expires_in) {
-          const expiry = new Date(Date.now() + (data.expires_in * 1000))
-          localStorage.setItem('token_expiry', expiry.toISOString())
-        }
-        
-        // Track login activity
-        localStorage.setItem('last_activity', new Date().toISOString())
+
+      if (error) {
+        throw new Error(error.message)
       }
-      
+
       return data
     } catch (error) {
       console.error('Login error:', error)
@@ -332,26 +344,22 @@ export const auth = {
         throw new Error('Password must contain uppercase, lowercase, number, and special character')
       }
 
-      const response = await api.post('/api/auth/register', { 
+      // Use Supabase for registration
+      const supabase = createClient()
+      const { data, error } = await supabase.auth.signUp({
         email: email.trim().toLowerCase(),
         password: password.trim(),
-        full_name: full_name?.trim()
-      })
-      
-      const data = response.data
-      
-      if (typeof window !== 'undefined' && data.access_token) {
-        localStorage.setItem('auth_token', data.access_token)
-        localStorage.setItem('user_data', JSON.stringify(data.user))
-        
-        if (data.expires_in) {
-          const expiry = new Date(Date.now() + (data.expires_in * 1000))
-          localStorage.setItem('token_expiry', expiry.toISOString())
+        options: {
+          data: {
+            full_name: full_name?.trim()
+          }
         }
-        
-        localStorage.setItem('last_activity', new Date().toISOString())
+      })
+
+      if (error) {
+        throw new Error(error.message)
       }
-      
+
       return data
     } catch (error) {
       console.error('Register error:', error)
@@ -359,83 +367,71 @@ export const auth = {
     }
   },
 
-  logout: () => {
-    if (typeof window !== 'undefined') {
-      // Clear all stored data
-      const keysToRemove = [
-        'auth_token', 'user_data', 'token_expiry', 'last_activity',
-        'returnTo' // Clear return URL too
-      ]
+  logout: async () => {
+    try {
+      const supabase = createClient()
+      await supabase.auth.signOut()
       
-      keysToRemove.forEach(key => {
-        localStorage.removeItem(key)
-        sessionStorage.removeItem(key)
-      })
-      
-      // Clear cookies
-      document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
-      
-      window.location.href = '/login'
+      if (typeof window !== 'undefined') {
+        // Clear any auth cookies
+        document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax'
+        
+        // Clear return URL
+        sessionStorage.removeItem('returnTo')
+        
+        console.log('User logged out successfully')
+        
+        window.location.href = '/login'
+      }
+    } catch (error) {
+      console.error('Logout error:', error)
+      // Still redirect to login even if logout fails
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login'
+      }
     }
   },
 
-  getCurrentUser: () => {
-    if (typeof window === 'undefined') return null
-    
+  getCurrentUser: async () => {
     try {
-    const userData = localStorage.getItem('user_data')
-      const tokenExpiry = localStorage.getItem('token_expiry')
+      const supabase = createClient()
+      const { data: { user }, error } = await supabase.auth.getUser()
       
-      // Check if token is expired
-      if (tokenExpiry && new Date() > new Date(tokenExpiry)) {
-        auth.logout()
+      if (error) {
+        console.error('Error getting current user:', error)
         return null
       }
       
-    return userData ? JSON.parse(userData) : null
+      return user
     } catch (error) {
       console.error('Error getting current user:', error)
-      auth.logout()
       return null
     }
   },
 
-  isAuthenticated: () => {
-    if (typeof window === 'undefined') return false
-    
-    const token = localStorage.getItem('auth_token')
-    const expiry = localStorage.getItem('token_expiry')
-    
-    if (!token) return false
-    
-    if (expiry && new Date() > new Date(expiry)) {
-      auth.logout()
+  isAuthenticated: async () => {
+    try {
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      return !!session
+    } catch (error) {
+      console.error('Error checking authentication:', error)
       return false
     }
-    
-    return true
   },
 
   refreshToken: async () => {
     try {
-      const response = await api.post('/api/auth/refresh')
-      const data = response.data
+      const supabase = createClient()
+      const { data, error } = await supabase.auth.refreshSession()
       
-      if (typeof window !== 'undefined' && data.access_token) {
-        localStorage.setItem('auth_token', data.access_token)
-        
-        if (data.expires_in) {
-          const expiry = new Date(Date.now() + (data.expires_in * 1000))
-          localStorage.setItem('token_expiry', expiry.toISOString())
-        }
-        
-        localStorage.setItem('last_activity', new Date().toISOString())
+      if (error) {
+        throw error
       }
       
       return data
     } catch (error) {
       console.error('Token refresh failed:', error)
-      auth.logout()
       throw error
     }
   }

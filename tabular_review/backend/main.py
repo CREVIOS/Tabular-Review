@@ -1,4 +1,4 @@
-from fastapi import FastAPI, status, Request
+from fastapi import FastAPI, status, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
@@ -29,19 +29,20 @@ class UUIDJSONResponse(JSONResponse):
 
 # ------------ single FastAPI instantiation ------------
 
-
-# @app.on_event("startup")
-# async def _startup():
-#     asyncio.create_task(_redis_listener())
-#     asyncio.create_task(cleanup_old_buffers())
-#     print("✅ background listeners started")
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Start background tasks
     bg1 = asyncio.create_task(_redis_listener())
     bg2 = asyncio.create_task(cleanup_old_buffers())
-    yield                                   # --- application is running ---
-    bg1.cancel(); bg2.cancel()              # graceful shutdown
+    print("✅ background listeners started")
+    
+    yield  # Application is running
+    
+    # Cleanup on shutdown
+    bg1.cancel()
+    bg2.cancel()
+    await asyncio.gather(bg1, bg2, return_exceptions=True)
+    print("✅ background listeners stopped")
 
 
 app = FastAPI(
@@ -53,6 +54,25 @@ app = FastAPI(
 
 
 # ------------ Exception handlers for better debugging ------------
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """Handle HTTP exceptions (including authentication errors)"""
+    print(f"HTTP {exc.status_code} error on {request.method} {request.url}: {exc.detail}")
+    
+    # Ensure proper headers for authentication errors
+    headers = getattr(exc, 'headers', None) or {}
+    if exc.status_code == 401 and 'WWW-Authenticate' not in headers:
+        headers['WWW-Authenticate'] = 'Bearer'
+    
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "detail": exc.detail,
+            "status_code": exc.status_code
+        },
+        headers=headers
+    )
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     """Handle FastAPI validation errors (422)"""
@@ -100,7 +120,11 @@ origins = [
     "http://localhost:3001",  # Add port 3001 where frontend is running
     "http://127.0.0.1:3000",
     "http://127.0.0.1:3001",
-    
+    "http://localhost",
+    "http://backend:8000",
+    "http://backend",
+    "http://frontend:3000",
+    "http://frontend",
     # add your prod domains here, e.g. "https://app.example.com"
 ]
 

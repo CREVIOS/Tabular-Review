@@ -57,6 +57,26 @@ interface ColumnMeta {
   isSticky?: boolean;
 }
 
+// Helper function to truncate text to max words
+function truncateToWords(text: string, maxWords: number = 4): string {
+  const words = text.split(' ')
+  if (words.length <= maxWords) return text
+  return words.slice(0, maxWords).join(' ') + '...'
+}
+
+// Helper function to get display name for columns
+function getColumnDisplayName(columnId: string, reviewColumns?: Array<{ id: string; column_name: string; prompt: string; data_type: string }>): string {
+  if (columnId === "fileName") return "Document"
+  if (columnId === "actions") return "Actions"
+  
+  const reviewColumn = reviewColumns?.find(rc => rc.id === columnId)
+  if (reviewColumn) {
+    return truncateToWords(reviewColumn.column_name)
+  }
+  
+  return truncateToWords(columnId)
+}
+
 export function DataTable({
   columns,
   data,
@@ -74,9 +94,16 @@ export function DataTable({
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
   const [globalFilter, setGlobalFilter] = React.useState("")
+  const [tableData, setTableData] = React.useState(data)
+  const [draggedRow, setDraggedRow] = React.useState<number | null>(null)
+
+  // Update table data when prop changes
+  React.useEffect(() => {
+    setTableData(data)
+  }, [data])
 
   const table = useReactTable({
-    data,
+    data: tableData,
     columns,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
@@ -90,10 +117,8 @@ export function DataTable({
       const fileName = row.original.fileName.toLowerCase()
       const searchValue = filterValue.toLowerCase()
       
-      // Search in file name
       if (fileName.includes(searchValue)) return true
       
-      // Search in all result values
       const results = row.original.results
       return Object.values(results).some(result => 
         result?.extracted_value?.toLowerCase().includes(searchValue)
@@ -112,33 +137,55 @@ export function DataTable({
     },
   })
 
-  // Enhanced Excel export function
+  // Drag and Drop handlers
+  const handleDragStart = React.useCallback((e: React.DragEvent, rowIndex: number) => {
+    setDraggedRow(rowIndex)
+    e.dataTransfer.effectAllowed = 'move'
+  }, [])
+
+  const handleDragOver = React.useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }, [])
+
+  const handleDrop = React.useCallback((e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault()
+    
+    if (draggedRow === null || draggedRow === dropIndex) return
+    
+    const newData = [...tableData]
+    const draggedItem = newData[draggedRow]
+    
+    // Remove dragged item
+    newData.splice(draggedRow, 1)
+    
+    // Insert at new position
+    newData.splice(dropIndex, 0, draggedItem)
+    
+    setTableData(newData)
+    setDraggedRow(null)
+  }, [draggedRow, tableData])
+
+  const handleDragEnd = React.useCallback(() => {
+    setDraggedRow(null)
+  }, [])
+
   const exportToExcel = React.useCallback(() => {
     try {
-      // Get filtered data from the table
       const filteredData = table.getFilteredRowModel().rows.map(row => row.original)
-      
-      // Create workbook
       const wb = XLSX.utils.book_new()
-      
-      // === MAIN DATA SHEET ===
       const exportData: (string | number | null)[][] = []
       
-      // Add header row with proper column names
       const headers = ['Document']
       const visibleColumns = table.getVisibleLeafColumns()
-      const columnOrder: string[] = ['fileName'] // Track column order
+      const columnOrder: string[] = ['fileName'] 
       
-      // Get column headers (skip actions column and get proper column names)
       visibleColumns.forEach(column => {
         if (column.id === 'fileName') {
-          // Already added 'Document'
         } else if (column.id === 'actions') {
-          // Skip actions column
+          
         } else {
-          // Find the review column data to get proper name
-          const reviewColumn = reviewColumns?.find(rc => rc.id === column.id)
-          const columnName = reviewColumn?.column_name || column.id
+          const columnName = getColumnDisplayName(column.id, reviewColumns)
           headers.push(columnName)
           columnOrder.push(column.id)
         }
@@ -146,7 +193,6 @@ export function DataTable({
       
       exportData.push(headers)
       
-      // Add data rows
       filteredData.forEach(row => {
         const exportRow: (string | number | null)[] = []
         
@@ -155,10 +201,8 @@ export function DataTable({
             exportRow.push(row.fileName)
           } else {
             const result = row.results[columnId]
-            // Include extracted value and confidence if available
             let cellValue = result?.extracted_value || ''
             
-            // Optionally include confidence score in parentheses
             if (result?.confidence_score && result.confidence_score > 0) {
               const confidence = Math.round(result.confidence_score * 100)
               cellValue = cellValue ? `${cellValue} (${confidence}%)` : `(${confidence}%)`
@@ -171,29 +215,24 @@ export function DataTable({
         exportData.push(exportRow)
       })
       
-      // Create main data worksheet
       const ws = XLSX.utils.aoa_to_sheet(exportData)
       
-      // Set column widths dynamically based on content
       const colWidths = headers.map((header: string, index: number) => {
-        if (index === 0) return { wch: 35 } // Document column wider
+        if (index === 0) return { wch: 35 } 
         
-        // Calculate width based on header and sample data
         let maxWidth = header.length
-        exportData.slice(1, 6).forEach(row => { // Check first 5 data rows
+        exportData.slice(1, 6).forEach(row => { 
           if (row[index] && typeof row[index] === 'string') {
             maxWidth = Math.max(maxWidth, row[index].length)
           }
         })
         
-        return { wch: Math.min(Math.max(maxWidth + 2, 15), 50) } // Min 15, max 50
+        return { wch: Math.min(Math.max(maxWidth + 2, 15), 50) } 
       })
       ws['!cols'] = colWidths
       
-      // Add worksheet to workbook
       XLSX.utils.book_append_sheet(wb, ws, 'Review Data')
       
-      // === METADATA SHEET ===
       const metaData = [
         ['Review Information', ''],
         ['Review Name', reviewName],
@@ -207,11 +246,10 @@ export function DataTable({
         ['Column Definitions', '']
       ]
       
-      // Add column definitions if available
       if (reviewColumns) {
         metaData.push(['Column Name', 'Prompt', 'Data Type'])
         reviewColumns.forEach(col => {
-          if (columnOrder.includes(col.id)) { // Only include visible columns
+          if (columnOrder.includes(col.id)) {
             metaData.push([col.column_name, col.prompt, col.data_type])
           }
         })
@@ -221,15 +259,12 @@ export function DataTable({
       metaWs['!cols'] = [{ wch: 20 }, { wch: 50 }]
       XLSX.utils.book_append_sheet(wb, metaWs, 'Metadata')
       
-      // Generate filename with timestamp
       const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-')
       const sanitizedName = reviewName.replace(/[^a-zA-Z0-9\s]/g, '').trim().replace(/\s+/g, '_')
       const filename = `${sanitizedName}_${timestamp}.xlsx`
       
-      // Save file
       XLSX.writeFile(wb, filename)
       
-      // Show success message
       console.log(`Excel file exported: ${filename}`)
       
     } catch (error) {
@@ -240,7 +275,6 @@ export function DataTable({
 
   return (
     <div className="w-full space-y-6">
-      {/* Header Section */}
       <div className="flex items-center justify-between">
         <div className="space-y-1">
           <h2 className="text-2xl font-bold tracking-tight text-gray-900">{reviewName}</h2>
@@ -249,17 +283,6 @@ export function DataTable({
               <span className="font-medium text-gray-900">{totalFiles}</span>
               <span>documents</span>
             </div>
-            <div className="flex items-center space-x-1">
-              <span className="font-medium text-gray-900">{totalColumns}</span>
-              <span>columns</span>
-            </div>
-            <Badge 
-              variant={reviewStatus === 'processing' ? 'secondary' : 'default'}
-              className="px-3 py-1"
-            >
-              {reviewStatus === 'processing' ? 'Processing' : 
-               reviewStatus === 'completed' ? 'Completed' : 'Draft'}
-            </Badge>
           </div>
         </div>
         <div className="flex items-center space-x-2">
@@ -284,7 +307,6 @@ export function DataTable({
         </div>
       </div>
 
-      {/* Progress Bar for Processing */}
       {reviewStatus === 'processing' && (
         <Card className="border-blue-200 bg-blue-50/50">
           <CardContent className="pt-4">
@@ -307,7 +329,6 @@ export function DataTable({
         </Card>
       )}
 
-      {/* Filters and Controls */}
       <div className="flex items-center justify-between space-x-4">
         <div className="flex flex-1 items-center space-x-3">
           <div className="relative max-w-sm">
@@ -353,6 +374,7 @@ export function DataTable({
                 .getAllColumns()
                 .filter((column) => column.getCanHide())
                 .map((column) => {
+                  const displayName = getColumnDisplayName(column.id, reviewColumns)
                   return (
                     <DropdownMenuCheckboxItem
                       key={column.id}
@@ -362,8 +384,7 @@ export function DataTable({
                         column.toggleVisibility(!!value)
                       }
                     >
-                      {column.id === "fileName" ? "Document" : 
-                       column.id === "actions" ? "Actions" : column.id}
+                      {displayName}
                     </DropdownMenuCheckboxItem>
                   )
                 })}
@@ -372,7 +393,6 @@ export function DataTable({
         </div>
       </div>
 
-      {/* Data Table */}
       <Card className="border-gray-200 shadow-sm">
         <CardContent className="p-0">
           <div className="table-container custom-scrollbar">
@@ -413,7 +433,12 @@ export function DataTable({
                       data-state={row.getIsSelected() && "selected"}
                       className={`border-b border-gray-100 hover:bg-gray-50/50 transition-colors ${
                         index % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'
-                      }`}
+                      } ${draggedRow === index ? 'opacity-50' : ''}`}
+                      draggable={true}
+                      onDragStart={(e) => handleDragStart(e, index)}
+                      onDragOver={handleDragOver}
+                      onDrop={(e) => handleDrop(e, index)}
+                      onDragEnd={handleDragEnd}
                     >
                       {row.getVisibleCells().map((cell) => (
                         <TableCell 
@@ -464,7 +489,6 @@ export function DataTable({
         </CardContent>
       </Card>
 
-      {/* Enhanced Pagination */}
       <div className="flex items-center justify-between space-x-4 py-4">
         <div className="flex flex-1 text-sm text-muted-foreground">
           <span>
@@ -524,4 +548,4 @@ export function DataTable({
       </div>
     </div>
   )
-} 
+}

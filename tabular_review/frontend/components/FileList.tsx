@@ -12,6 +12,7 @@ import {
   Loader2,
   Sparkles,
   HardDrive,
+
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -23,6 +24,7 @@ import {
   DropdownMenuItem, 
   DropdownMenuTrigger 
 } from '@/components/ui/dropdown-menu'
+import { createClient } from '@/lib/supabase/client'
 
 interface File {
   id: string
@@ -74,7 +76,6 @@ export default function FileList({
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [, setLoading] = useState(false)
 
-  // Fetch folders on mount
   useEffect(() => {
     fetchFolders()
   }, [])
@@ -82,12 +83,17 @@ export default function FileList({
   const fetchFolders = async () => {
     try {
       setLoading(true)
-      const token = localStorage.getItem('auth_token')
-      if (!token) return
+      const supabase = createClient()
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      
+      if (sessionError || !session) {
+        console.error('No authentication session found')
+        return
+      }
 
       const response = await fetch('http://localhost:8000/api/folders/', {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json'
         }
       })

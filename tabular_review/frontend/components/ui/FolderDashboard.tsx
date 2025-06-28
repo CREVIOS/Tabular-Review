@@ -29,6 +29,7 @@ import {
   DropdownMenuTrigger 
 } from '@/components/ui/dropdown-menu'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { createClient } from '@/lib/supabase/client'
 
 interface Folder {
   id: string
@@ -87,15 +88,17 @@ export default function FolderDashboard({ onFolderSelect, selectedFolderId }: Fo
       setLoading(true)
       setError(null)
 
-      const token = localStorage.getItem('auth_token')
-      if (!token) {
+      const supabase = createClient()
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      
+      if (sessionError || !session) {
         setError('Authentication required')
         return
       }
 
       const response = await fetch('http://localhost:8000/api/folders/', {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json'
         }
       })
@@ -119,12 +122,17 @@ export default function FolderDashboard({ onFolderSelect, selectedFolderId }: Fo
 
     try {
       setIsCreating(true)
-      const token = localStorage.getItem('auth_token')
+      const supabase = createClient()
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      
+      if (sessionError || !session) {
+        throw new Error('Authentication required')
+      }
 
       const response = await fetch('http://localhost:8000/api/folders/', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
@@ -161,12 +169,17 @@ export default function FolderDashboard({ onFolderSelect, selectedFolderId }: Fo
 
     try {
       setIsUpdating(true)
-      const token = localStorage.getItem('auth_token')
+      const supabase = createClient()
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      
+      if (sessionError || !session) {
+        throw new Error('Authentication required')
+      }
 
       const response = await fetch(`http://localhost:8000/api/folders/${editingFolder.id}`, {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
@@ -201,12 +214,17 @@ export default function FolderDashboard({ onFolderSelect, selectedFolderId }: Fo
     }
 
     try {
-      const token = localStorage.getItem('auth_token')
+      const supabase = createClient()
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      
+      if (sessionError || !session) {
+        throw new Error('Authentication required')
+      }
 
       const response = await fetch(`http://localhost:8000/api/folders/${folderId}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json'
         }
       })

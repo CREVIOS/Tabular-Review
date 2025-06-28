@@ -10,10 +10,11 @@ import {
   Loader2,
   AlertCircle,
   Download,
+  GripVertical,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,9 +37,7 @@ export type ReviewTableRow = {
   results: Record<string, ReviewResult | null>
 }
 
-/* ------------------------------------------------------------------ */
-/*  ✨ Re-usable column-header helper so every header is centered,
-    sortable, and optionally hideable.  */
+
 function CenteredHeader({
   title,
   column,
@@ -62,7 +61,6 @@ function CenteredHeader({
     </Button>
   )
 }
-/* ------------------------------------------------------------------ */
 
 interface CreateColumnsProps {
   columns: ReviewColumn[]
@@ -73,6 +71,13 @@ interface CreateColumnsProps {
   isMobile?: boolean
 }
 
+// Helper function to truncate text to max 4 words
+function truncateToWords(text: string, maxWords: number = 4): string {
+  const words = text.split(' ')
+  if (words.length <= maxWords) return text
+  return words.slice(0, maxWords).join(' ') + '...'
+}
+
 export function createColumns({
   columns,
   realTimeUpdates,
@@ -80,7 +85,7 @@ export function createColumns({
   onCellClick,
   onViewFile,
 }: CreateColumnsProps): ColumnDef<ReviewTableRow>[] {
-  /* ─────────────────────────────  static columns  ─────────────────────────── */
+  
   const baseColumns: ColumnDef<ReviewTableRow>[] = [
     {
       accessorKey: "fileName",
@@ -96,41 +101,27 @@ export function createColumns({
         />
       ),
       cell: ({ row }) => {
-        const { file } = row.original
+        const rowIndex = row.index + 1
+        
         return (
-          <div className="flex items-center gap-3">
-            <div className="w-1.5 h-8 rounded bg-gradient-to-b from-blue-500 to-blue-600" />
-            <div className="min-w-0 space-y-0.5">
-              <p
-                className="truncate text-sm font-medium text-gray-900 max-w-[16rem]"
-                title={row.original.fileName}
-              >
-                {row.original.fileName}
-              </p>
-              <div className="flex items-center gap-2">
-                <Badge
-                  variant={
-                    file.status === "completed"
-                      ? "default"
-                      : file.status === "processing"
-                      ? "secondary"
-                      : "outline"
-                  }
-                  className="px-1.5 py-0.5 text-[10px]"
-                >
-                  {file.status === "completed"
-                    ? "Ready"
-                    : file.status === "processing"
-                    ? "Processing"
-                    : "Pending"}
-                </Badge>
-                {file.file_size && (
-                  <span className="text-[10px] text-muted-foreground">
-                    {formatFileSize(file.file_size)}
-                  </span>
-                )}
-              </div>
+          <div className="flex items-center gap-3 py-2">
+            {/* Row Number */}
+            <span className="text-sm text-gray-500 w-6 text-center font-medium">
+              {rowIndex}
+            </span>
+            
+            {/* Drag Handle */}
+            <div className="drag-handle cursor-grab hover:cursor-grabbing">
+              <GripVertical className="h-4 w-4 text-gray-400 hover:text-gray-600" />
             </div>
+            
+            {/* Document Icon - Always show for every row */}
+            <FileText className="h-4 w-4 text-gray-500 flex-shrink-0" />
+            
+            {/* Filename */}
+            <span className="text-sm text-gray-900 truncate flex-1">
+              {row.original.fileName}
+            </span>
           </div>
         )
       },
@@ -144,9 +135,9 @@ export function createColumns({
     },
     {
       id: "actions",
-      header: () => <div className="text-center w-full" />, // keeps spacing
+      header: () => <div className="text-center w-full">Actions</div>,
       enableSorting: false,
-      size: 60,
+      size: 80,
       cell: ({ row }) => {
         const fileId = row.original.file.file_id
         const handleViewFile = () => onViewFile(fileId)
@@ -160,19 +151,19 @@ export function createColumns({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuLabel>File actions</DropdownMenuLabel>
+              <DropdownMenuLabel>File Actions</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleViewFile}>
                 <Eye className="mr-2 h-4 w-4" />
-                View document
+                View Document
               </DropdownMenuItem>
               <DropdownMenuItem>
                 <Download className="mr-2 h-4 w-4" />
-                Download
+                Download File
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleCopyId}>
-                Copy file ID
+                Copy File ID
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -190,9 +181,11 @@ export function createColumns({
         <CenteredHeader
           title={
             <div className="flex flex-col items-center">
-              <span className="truncate max-w-[8rem] font-medium">{col.column_name}</span>
+              <span className="truncate max-w-[8rem] font-medium">
+                {truncateToWords(col.column_name)}
+              </span>
               <span className="text-[10px] text-muted-foreground truncate max-w-[8rem]">
-                {col.prompt}
+                {truncateToWords(col.prompt)}
               </span>
             </div>
           }
@@ -245,26 +238,9 @@ export function createColumns({
         console.log('✅ Rendering data for:', key, res.extracted_value)
         const confidence = Math.round((res.confidence_score || 0) * 100)
         
-        // **NEW: Truncate text to ~7 words**
+        // Truncate text to ~4 words max
         const fullText = res.extracted_value || ''
-        const words = fullText.split(' ')
-        const shouldTruncate = words.length > 7
-        const displayText = shouldTruncate 
-          ? words.slice(0, 7).join(' ') + '...'
-          : fullText
-      
-       
-        if (process.env.NODE_ENV === 'development' && Math.random() < 0.02) { // Only log 2% to reduce spam
-            console.log('🎨 Cell Render Debug:', {
-              cellKey: key,
-              fileName: row.original.fileName.substring(0, 20) + '...',
-              columnName: col.column_name,
-              spinning,
-              hasRes: !!res,
-              extractedValue: res?.extracted_value?.substring(0, 30) + '...',
-              state: spinning ? 'SPINNING' : res?.error ? 'ERROR' : (!res || !res.extracted_value) ? 'WAITING' : 'DATA'
-            })
-          }
+        const displayText = truncateToWords(fullText, 4)
       
         return (
           <div
@@ -275,14 +251,6 @@ export function createColumns({
               res.source_reference ? `\nSource: ${res.source_reference}` : ""
             }`}
           >
-            {/* **DEBUG: Visual state indicator** */}
-            {process.env.NODE_ENV === 'development' && (
-              <div className="absolute top-1 right-1 bg-green-600 text-white text-[8px] px-1 py-0.5 rounded z-20">
-                DATA
-              </div>
-            )}
-            
-            {/* **SIMPLIFIED: Just show truncated text - all details in native tooltip** */}
             <div className="text-[13px] leading-relaxed text-left w-full min-h-[20px]">
               <div className="truncate">
                 {displayText}
@@ -314,11 +282,4 @@ function CenteredBox({ children }: { children: React.ReactNode }) {
       {children}
     </div>
   )
-}
-
-function formatFileSize(bytes: number) {
-  if (!bytes) return "0 B"
-  const u = ["B", "KB", "MB", "GB", "TB"]
-  const i = Math.floor(Math.log(bytes) / Math.log(1024))
-  return `${(bytes / 1024 ** i).toFixed(1)} ${u[i]}`
 }

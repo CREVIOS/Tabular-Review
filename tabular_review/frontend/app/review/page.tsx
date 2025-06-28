@@ -2,7 +2,7 @@
 
 'use client'
 
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { 
   RefreshCw, 
@@ -13,6 +13,7 @@ import {
   FileText,
   BarChart3,
 } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -40,9 +41,28 @@ import EnhancedCreateReview from '../../components/CreateReview'
 // Types
 import { Review } from '../../types'
 
-export default function TabularReviewPage() {
+// Loading component for Suspense fallback
+function ReviewPageLoading() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex items-center justify-center h-[60vh]">
+          <div className="text-center">
+            <RefreshCw className="h-12 w-12 animate-spin mx-auto mb-4 text-blue-600" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Loading Reviews</h3>
+            <p className="text-gray-600">Initializing review page...</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Main component that uses useSearchParams
+function TabularReviewPageContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
+  const supabase = createClient()
   
   // Get folder context from URL parameters
   const folderId = searchParams.get('folderId')
@@ -97,12 +117,17 @@ export default function TabularReviewPage() {
   useEffect(() => {
     const fetchFolders = async () => {
       try {
-        const token = localStorage.getItem('auth_token')
-        if (!token) return
+        // Get current session
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        
+        if (sessionError || !session) {
+          console.error('No session found for fetching folders')
+          return
+        }
 
         const response = await fetch('http://localhost:8000/api/folders/', {
           headers: {
-            'Authorization': `Bearer ${token}`,
+            'Authorization': `Bearer ${session.access_token}`,
             'Content-Type': 'application/json'
           }
         })
@@ -117,7 +142,7 @@ export default function TabularReviewPage() {
     }
 
     fetchFolders()
-  }, [])
+  }, [supabase.auth])
 
   // Error handling
   useEffect(() => {
@@ -244,7 +269,7 @@ export default function TabularReviewPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+      <div className="w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
         
         {/* Header */}
         <div className="mb-8">
@@ -454,5 +479,14 @@ export default function TabularReviewPage() {
         </Card>
       </div>
     </div>
+  )
+}
+
+// Main exported component with Suspense boundary
+export default function TabularReviewPage() {
+  return (
+    <Suspense fallback={<ReviewPageLoading />}>
+      <TabularReviewPageContent />
+    </Suspense>
   )
 }

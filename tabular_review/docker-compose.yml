@@ -4,7 +4,7 @@ services:
     image: redis:8.0-alpine
     container_name: tabular-review-redis
     ports:
-      - "6379:6379"
+      - "6380:6379" # Changed to avoid conflict with existing Redis
     volumes:
       - redis-data:/data
     command: redis-server --save 60 1 --loglevel warning
@@ -22,15 +22,42 @@ services:
       dockerfile: Dockerfile
     container_name: tabular-review-backend
     ports:
-      - "8000:8000"
+      - "${PORT:-8001}:8000" # Changed to 8001 to avoid potential conflicts
     environment:
-      - REDIS_URL=redis://redis:6379/0
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-tabular_review}
+      # Core Settings
+      - ENVIRONMENT=${ENVIRONMENT}
+      - DEBUG=${DEBUG}
+      - PORT=${PORT:-8000}
+
+      # Security
+      - SECRET_KEY=${SECRET_KEY}
+      - JWT_SECRET=${JWT_SECRET}
+
+      # Supabase
       - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+
+      # Redis & Celery
+      - REDIS_HOST=redis # NEW
+      - REDIS_PORT=6379 # NEW
+      - REDIS_URL=${REDIS_URL}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
+
+      # AI Services
       - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - JWT_SECRET=${JWT_SECRET:-your-jwt-secret-change-in-production}
-      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+
+      # Storage
+      - STORAGE_BUCKET=${STORAGE_BUCKET}
+
+      # Performance Settings
+      - MAX_CONCURRENT_EXTRACTIONS=${MAX_CONCURRENT_EXTRACTIONS}
+      - MAX_UPLOAD_SIZE_MB=${MAX_UPLOAD_SIZE_MB}
+      - CHUNK_SIZE_TOKENS=${CHUNK_SIZE_TOKENS}
+      - EMBEDDING_BATCH_SIZE=${EMBEDDING_BATCH_SIZE}
     volumes:
       - ./backend:/app
       - backend-uploads:/app/uploads
@@ -52,13 +79,39 @@ services:
     container_name: tabular-review-celery-worker
     command: celery -A celery_app worker --loglevel=info --pool=solo
     environment:
-      - REDIS_URL=redis://redis:6379/0
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-tabular_review}
+      # Core Settings
+      - ENVIRONMENT=${ENVIRONMENT}
+      - DEBUG=${DEBUG}
+
+      # Security
+      - SECRET_KEY=${SECRET_KEY}
+      - JWT_SECRET=${JWT_SECRET}
+
+      # Supabase
       - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+
+      # Redis & Celery
+      - REDIS_HOST=redis # NEW
+      - REDIS_PORT=6379 # NEW
+      - REDIS_URL=${REDIS_URL}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
+
+      # AI Services
       - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - JWT_SECRET=${JWT_SECRET:-your-jwt-secret-change-in-production}
-      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+
+      # Storage
+      - STORAGE_BUCKET=${STORAGE_BUCKET}
+
+      # Performance Settings
+      - MAX_CONCURRENT_EXTRACTIONS=${MAX_CONCURRENT_EXTRACTIONS}
+      - MAX_UPLOAD_SIZE_MB=${MAX_UPLOAD_SIZE_MB}
+      - CHUNK_SIZE_TOKENS=${CHUNK_SIZE_TOKENS}
+      - EMBEDDING_BATCH_SIZE=${EMBEDDING_BATCH_SIZE}
     volumes:
       - ./backend:/app
       - backend-uploads:/app/uploads
@@ -69,7 +122,54 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # Celery Flower (optional - monitoring)
+  # Celery Beat (Scheduler) - for periodic tasks
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: tabular-review-celery-beat
+    command: celery -A celery_app beat --loglevel=info
+    environment:
+      # Core Settings
+      - ENVIRONMENT=${ENVIRONMENT}
+      - DEBUG=${DEBUG}
+
+      # Security
+      - SECRET_KEY=${SECRET_KEY}
+      - JWT_SECRET=${JWT_SECRET}
+
+      # Supabase
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+
+      # Redis & Celery
+      # Redis & Celery - ADD THESE LINES
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_URL=${REDIS_URL}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
+
+      # AI Services
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+
+      # Storage
+      - STORAGE_BUCKET=${STORAGE_BUCKET}
+    volumes:
+      - ./backend:/app
+      - backend-uploads:/app/uploads
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    profiles: ["with-scheduler"]
+
+  # Celery Flower (monitoring)
   celery-flower:
     build:
       context: ./backend
@@ -79,8 +179,9 @@ services:
     ports:
       - "5555:5555"
     environment:
-      - REDIS_URL=redis://redis:6379/0
-      - CELERY_BROKER_URL=redis://redis:6379/0
+      - REDIS_URL=${REDIS_URL}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
     depends_on:
       - redis
       - celery-worker
@@ -90,21 +191,34 @@ services:
   # Frontend
   frontend:
     build:
-      context: ./frontend/tabular_review
+      context: ./frontend/frontend
       dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_SUPABASE_URL=${SUPABASE_URL}
+        - NEXT_PUBLIC_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+        - BACKEND_URL=http://backend:8000
     container_name: tabular-review-frontend
     ports:
       - "3000:3000"
     environment:
+      # Next.js Settings
       - NODE_ENV=production
+      - NEXT_TELEMETRY_DISABLED=${NEXT_TELEMETRY_DISABLED}
+
+      # API Configuration
       - BACKEND_URL=http://backend:8000
-      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+      - USE_NGINX_PROXY=${USE_NGINX_PROXY}
+
+      # Supabase (for client-side)
+      - NEXT_PUBLIC_SUPABASE_URL=${SUPABASE_URL}
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
     depends_on:
       backend:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -114,8 +228,8 @@ services:
     image: nginx:alpine
     container_name: tabular-review-nginx
     ports:
-      - "80:80"
-      - "443:443"
+      - "8081:80" # Changed to avoid conflict with existing nginx
+      - "8443:443" # Changed to avoid conflict with existing nginx
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/ssl:/etc/nginx/ssl:ro

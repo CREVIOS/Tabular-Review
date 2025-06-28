@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
-import { AuthProvider } from '@/lib/auth-context'
+
 import { Providers } from '@/components/providers'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -77,7 +77,7 @@ export const metadata: Metadata = {
       },
     ],
   },
-  manifest: '/site.webmanifest',
+  // manifest: '/site.webmanifest',
   other: {
     'msapplication-TileColor': '#3b82f6',
     'theme-color': '#ffffff',
@@ -108,7 +108,7 @@ export default function RootLayout({
             style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
             img-src 'self' data: https: blob:;
             font-src 'self' https://fonts.gstatic.com;
-            connect-src 'self' http://localhost:8000 https://localhost:8000 ${process.env.NEXT_PUBLIC_API_URL || ''} wss: ws:;
+            connect-src 'self' http://localhost:8000 https://localhost:8000 ${process.env.NEXT_PUBLIC_API_URL || ''} wss: ws: ${process.env.NEXT_PUBLIC_SUPABASE_URL} wss://knqkunivquuuvnfwrqrn.supabase.co;
             media-src 'self';
             object-src 'none';
             base-uri 'self';
@@ -163,13 +163,13 @@ export default function RootLayout({
           </div>
         </noscript>
         
-        <AuthProvider>
+        {/* <AuthProvider> */}
           <Providers>
             <div id="app-root" className="min-h-screen">
               {children}
             </div>
           </Providers>
-        </AuthProvider>
+        {/* </AuthProvider> */}
         
         {/* Error Boundary Script */}
         <script

@@ -13,7 +13,7 @@ import {
   FileText,
   Eye
 } from 'lucide-react'
-import { auth } from '@/lib/api'
+import { createClient } from '@/lib/supabase/client'
 import { fetchDocumentsData, formatFileSize } from '@/lib/documents-api'
 import type { Folder } from '@/types/documents'
 import { Button } from '@/components/ui/button'
@@ -40,6 +40,7 @@ const folderColors = [
 
 export default function FolderManagementPage() {
   const router = useRouter()
+  const supabase = createClient()
   
   // State
   const [folders, setFolders] = useState<Folder[]>([])
@@ -61,21 +62,50 @@ export default function FolderManagementPage() {
   })
 
   useEffect(() => {
-    // Check authentication
+    // Check Supabase authentication
     const checkAuth = async () => {
-      const authenticated = auth.isAuthenticated()
-      setIsAuthenticated(authenticated)
-      
-      if (!authenticated) {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession()
+        
+        if (error) {
+          console.error('Auth error:', error)
+          setIsAuthenticated(false)
+          router.push('/login')
+          return
+        }
+        
+        if (!session) {
+          console.log('No session found, redirecting to login')
+          setIsAuthenticated(false)
+          router.push('/login')
+          return
+        }
+        
+        setIsAuthenticated(true)
+        fetchFolders()
+      } catch (error) {
+        console.error('Authentication check failed:', error)
+        setIsAuthenticated(false)
         router.push('/login')
-        return
       }
-      
-      fetchFolders()
     }
     
     checkAuth()
-  }, [router])
+    
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === 'SIGNED_OUT') {
+          setIsAuthenticated(false)
+          router.push('/login')
+        } else if (session) {
+          setIsAuthenticated(true)
+        }
+      }
+    )
+    
+    return () => subscription.unsubscribe()
+  }, [router, supabase.auth])
 
   const fetchFolders = async () => {
     try {
@@ -97,21 +127,16 @@ export default function FolderManagementPage() {
 
   const createFolder = async () => {
     try {
+      setError(null)
+      
       if (!newFolderData.name.trim()) {
         setError('Folder name is required')
         return
       }
 
-      const token = localStorage.getItem('auth_token')
-      if (!token) {
-        setError('Authentication required')
-        return
-      }
-
-      const response = await fetch('http://localhost:8000/api/folders/', {
+      const response = await fetch('/api/documents', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
@@ -123,7 +148,7 @@ export default function FolderManagementPage() {
 
       if (!response.ok) {
         const errorData = await response.json()
-        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`)
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
       }
 
       const newFolder = await response.json()

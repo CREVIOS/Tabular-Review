@@ -204,23 +204,11 @@ export const useRealtimeStore = create<RealtimeState>()(
             } = get()
             
             switch (data.type) {
-              case 'heartbeat':
-              case 'connected':
-                console.log('💓 SSE heartbeat/connected')
-                break
-                
-              case 'cell_processing_started':
-                console.log('🔄 Cell processing started:', `${data.file_id}-${data.column_id}`)
-                console.log('📝 Adding to processing cells...')
-                addProcessingCell(`${data.file_id}-${data.column_id}`)
-                
-                // Force a state update to trigger re-render
-                const currentState = get()
-                console.log('🔄 Current processing cells after add:', currentState.processingCells.size)
-                console.log('🔄 Processing cells Set:', Array.from(currentState.processingCells).slice(0, 3))
-                break
-                
-              case 'cell_completed':
+
+
+
+
+                            case 'cell_completed':
                 console.log('✅ Cell completed:', `${data.file_id}-${data.column_id}`, data.result)
                 const cellKey = `${data.file_id}-${data.column_id}`
                 console.log('📝 Removing from processing cells and adding result...')
@@ -243,6 +231,20 @@ export const useRealtimeStore = create<RealtimeState>()(
                   value: data.result?.extracted_value,
                   confidence: data.result?.confidence_score
                 })
+              
+                case 'cell_processing_started':
+                  console.log('🔄 Cell processing started:', `${data.file_id}-${data.column_id}`)
+                  console.log('📝 Adding to processing cells...')
+                  addProcessingCell(`${data.file_id}-${data.column_id}`)
+                  
+                  // Force a state update to trigger re-render
+                  const currentState = get()
+                  console.log('🔄 Current processing cells after add:', currentState.processingCells.size)
+                  console.log('🔄 Processing cells Set:', Array.from(currentState.processingCells).slice(0, 3))
+                  
+              case 'heartbeat':
+              case 'connected':
+                console.log('💓 SSE heartbeat/connected')
                 break
                 
               case 'cell_error':

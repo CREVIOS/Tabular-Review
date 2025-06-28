@@ -1,8 +1,9 @@
 # Multi-stage build for Next.js frontend
 FROM node:20-alpine AS base
 
-# Install pnpm
-RUN corepack enable pnpm
+# Install pnpm and curl for health checks
+RUN corepack enable pnpm && \
+    apk add --no-cache curl
 
 # Dependencies stage
 FROM base AS deps
@@ -25,27 +26,42 @@ COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
+# Build arguments for Supabase (needed for static generation)
+ARG NEXT_PUBLIC_SUPABASE_URL
+ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
+ARG BACKEND_URL
+
+# Set environment variables for build process
+ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
+ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
+ENV BACKEND_URL=$BACKEND_URL
+
 # Build the application
 RUN pnpm run build
 
 # Runner stage
-FROM base AS runner
+FROM node:20-alpine AS runner
 WORKDIR /app
+
+# Install curl for health checks
+RUN apk add --no-cache curl
 
 # Set environment variables
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV HOSTNAME="0.0.0.0"
+ENV PORT=3000
 
 # Create nextjs user
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
 
 # Copy built application
 COPY --from=builder /app/public ./public
 
 # Set correct permissions for prerender cache
-RUN mkdir .next
-RUN chown nextjs:nodejs .next
+RUN mkdir .next && \
+    chown nextjs:nodejs .next
 
 # Copy built application with correct permissions
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
@@ -57,13 +73,9 @@ USER nextjs
 # Expose port
 EXPOSE 3000
 
-# Set hostname to localhost
-ENV HOSTNAME="0.0.0.0"
-ENV PORT=3000
-
 # Health check
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:3000 || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:3000/api/health || curl -f http://localhost:3000 || exit 1
 
 # Start the application
 CMD ["node", "server.js"] 

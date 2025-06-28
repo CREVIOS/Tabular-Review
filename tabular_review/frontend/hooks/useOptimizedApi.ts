@@ -2,26 +2,33 @@ import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tansta
 import { Review, File } from '../types'
 import { NewColumn } from '../types'
 import { useRealtimeStore } from '../store/useRealtimeStore'
+import { createClient } from '@/lib/supabase/client'
 
 const EMPTY_ARRAY: Review[] = []
 
 // API Client with better error handling and retries
 class ApiClient {
   private baseUrl = 'http://localhost:8000/api'
-  private token: string | null = null
 
-  constructor() {
-    if (typeof window !== 'undefined') {
-      this.token = localStorage.getItem('auth_token')
+  private async getToken(): Promise<string | null> {
+    try {
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      return session?.access_token || null
+    } catch (error) {
+      console.error('Failed to get auth token:', error)
+      return null
     }
   }
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`
+    const token = await this.getToken()
+    
     const config: RequestInit = {
       headers: {
         'Content-Type': 'application/json',
-        ...(this.token && { 'Authorization': `Bearer ${this.token}` }),
+        ...(token && { 'Authorization': `Bearer ${token}` }),
         ...options.headers,
       },
       ...options,

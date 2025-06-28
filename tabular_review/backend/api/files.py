@@ -32,8 +32,16 @@ async def upload_files(request: Request):
     try:
         print(f"Manual auth - Token received: {token[:20]}...")
         
-        # Verify custom JWT token
-        user_id = verify_token(token)
+        # Verify Supabase JWT token
+        user_data = verify_token(token)
+        if not user_data:
+            print("Manual auth - Token verification failed")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token"
+            )
+        
+        user_id = user_data["id"]
         print(f"Manual auth - Token verified for user_id: {user_id}")
         
         # Get user from custom users table
@@ -248,9 +256,22 @@ async def upload_files(request: Request):
     return uploaded_files
 
 @router.get("/", response_model=List[FileResponse])
-async def get_user_files(folder_id: Optional[str] = None, current_user = Depends(get_current_user)):
-    """Get files for current user, optionally filtered by folder"""
+async def get_user_files(
+    folder_id: Optional[str] = None, 
+    page: int = 1, 
+    limit: int = 50,
+    current_user = Depends(get_current_user)
+):
+    """Get files for current user, optionally filtered by folder with pagination"""
     try:
+        print(f"get_user_files called - user: {current_user.email}, folder_id: {folder_id}, page: {page}, limit: {limit}")
+        
+        # Validate pagination parameters
+        if page < 1:
+            page = 1
+        if limit < 1 or limit > 100:  # Max 100 files per page
+            limit = 50
+            
         supabase_admin = get_supabase_admin()
         
         # Build query
@@ -260,21 +281,32 @@ async def get_user_files(folder_id: Optional[str] = None, current_user = Depends
             if folder_id == "null" or folder_id == "":
                 # Get files not in any folder
                 query = query.is_("folder_id", None)
+                print("Filtering for files without folder")
             else:
                 # Get files in specific folder
                 query = query.eq("folder_id", folder_id)
+                print(f"Filtering for files in folder: {folder_id}")
         
-        response = query.order("created_at", desc=True).execute()
+        # Add pagination
+        offset = (page - 1) * limit
+        query = query.order("created_at", desc=True).range(offset, offset + limit - 1)
+        
+        print(f"Executing database query with pagination (offset: {offset}, limit: {limit})...")
+        response = query.execute()
         
         if hasattr(response, 'error') and response.error:
+            print(f"Database query failed: {response.error}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to fetch files: {response.error}"
             )
         
+        files_count = len(response.data)
+        print(f"Database query successful - found {files_count} files for this page")
+        
         files = []
-        for file_data in response.data:
-            # Parse dates safely (same as before)
+        for i, file_data in enumerate(response.data):
+            # Parse dates safely (simplified for performance)
             created_at = None
             processed_at = None
             updated_at = None
@@ -302,6 +334,7 @@ async def get_user_files(folder_id: Optional[str] = None, current_user = Depends
                 created_at = datetime.utcnow()
                 updated_at = datetime.utcnow()
             
+            # Create optimized response with only essential data
             files.append(FileResponse(
                 id=file_data["id"],
                 user_id=file_data["user_id"],
@@ -317,11 +350,15 @@ async def get_user_files(folder_id: Optional[str] = None, current_user = Depends
                 error_message=file_data.get("error_message")
             ))
         
+        print(f"Successfully processed {len(files)} files - returning response (page {page})")
         return files
         
     except HTTPException:
         raise
     except Exception as e:
+        print(f"Unexpected error in get_user_files: {str(e)}")
+        import traceback
+        print(f"Full traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch files: {str(e)}"

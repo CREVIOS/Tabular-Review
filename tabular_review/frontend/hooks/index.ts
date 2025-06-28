@@ -1,3 +1,5 @@
 export { useAuth } from './useAuth'
 export { useApi } from './useApi'
-export { useSSE } from './useSSE' 
+export { useSSE } from './useSSE'
+export { useIsMobile } from './use-mobile'
+export * from './useOptimizedApi' 

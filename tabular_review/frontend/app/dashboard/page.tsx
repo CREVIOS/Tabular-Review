@@ -1,7 +1,8 @@
 "use client"
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { auth } from '@/lib/api'
+import { createClient } from '@/lib/supabase/client'
+import type { User } from '@supabase/supabase-js'
 import { fetchDashboardData, calculateFileStats, calculateReviewStats, getRecentActivity } from '@/lib/dashboard-api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -20,10 +21,13 @@ import {
   Folder
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { File } from '@/types'
 // import { Progress } from '@/components/ui/progress'
 
 export default function DashboardPage() {
   const router = useRouter()
+  const supabase = createClient()
+  const [currentUser, setCurrentUser] = useState<User | null>(null)
   const [stats, setStats] = useState({
     total: 0,
     processing: 0,
@@ -36,18 +40,52 @@ export default function DashboardPage() {
   })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [recentActivity, setRecentActivity] = useState<any[]>([])
+  const [recentActivity, setRecentActivity] = useState<File[]>([])
 
   useEffect(() => {
-    // Check authentication
-    if (!auth.isAuthenticated()) {
-      console.log('User not authenticated, redirecting to login')
-      router.push('/login')
-      return
+    // Check Supabase authentication
+    const checkAuth = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession()
+        
+        if (error) {
+          console.error('Auth error:', error)
+          router.push('/login')
+          return
+        }
+        
+        if (!session) {
+          console.log('No session found, redirecting to login')
+          router.push('/login')
+          return
+        }
+        
+        // Get user data from the session
+        setCurrentUser(session.user)
+        
+        // Fetch dashboard data
+        await fetchDashboard()
+      } catch (error) {
+        console.error('Authentication check failed:', error)
+        router.push('/login')
+      }
     }
-
-    fetchDashboard()
-  }, [router])
+    
+    checkAuth()
+    
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === 'SIGNED_OUT') {
+          router.push('/login')
+        } else if (session) {
+          setCurrentUser(session.user)
+        }
+      }
+    )
+    
+    return () => subscription.unsubscribe()
+  }, [router, supabase.auth])
 
   const fetchDashboard = async () => {
     try {
@@ -65,8 +103,13 @@ export default function DashboardPage() {
       
       // Set combined stats
       setStats({
-        ...fileStats,
-        ...reviewStats,
+        total: fileStats.total || 0,
+        processing: fileStats.processing || 0,
+        completed: fileStats.completed || 0,
+        failed: fileStats.failed || 0,
+        totalReviews: reviewStats.totalReviews || 0,
+        activeReviews: reviewStats.activeReviews || 0,
+        completedReviews: reviewStats.completedReviews || 0,
         totalFolders: dashboardData.folders.length
       })
 
@@ -84,11 +127,9 @@ export default function DashboardPage() {
     }
   }
 
-  const currentUser = auth.getCurrentUser()
-
   if (loading) {
     return (
-      <div className="container mx-auto p-6">
+      <div className="min-h-screen mx-auto p-6 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
           <p className="mt-4">Loading dashboard...</p>
@@ -123,7 +164,7 @@ export default function DashboardPage() {
           <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
         {currentUser && (
             <p className="text-gray-600 mt-1">
-            Welcome back, {currentUser.full_name || currentUser.email}
+            Welcome back, {currentUser.user_metadata?.full_name || currentUser.email}
           </p>
         )}
       </div>
@@ -275,30 +316,6 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         </div>
-
-        {/* Processing Progress
-        {stats.processing > 0 && (
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <TrendingUp className="h-5 w-5" />
-                Processing Progress
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span>Overall Completion</span>
-                  <span>{Math.round(completionRate)}%</span>
-                </div>
-                <Progress value={completionRate} className="h-2" />
-                <p className="text-xs text-muted-foreground">
-                  {stats.processing} documents currently processing
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        )} */}
       </div>
 
       {/* Recent Activity */}
@@ -311,18 +328,18 @@ export default function DashboardPage() {
           <Card>
             <CardContent className="p-0">
               <div className="divide-y">
-                {recentActivity.map((file: Record<string, unknown>) => (
-                  <div key={file.id as string} className="p-4 flex items-center justify-between hover:bg-gray-50">
+                {recentActivity.map((file) => (
+                  <div key={file.id} className="p-4 flex items-center justify-between hover:bg-gray-50">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
                         <FileText className="h-4 w-4 text-blue-600" />
                       </div>
                       <div>
                         <div className="font-medium text-gray-900 truncate max-w-xs">
-                          {file.original_filename as string}
+                          {file.original_filename}
                         </div>
                         <div className="text-sm text-gray-500">
-                          {new Date((file.updated_at || file.created_at) as string).toLocaleDateString()}
+                          {new Date(file.updated_at || file.upload_date).toLocaleDateString()}
                         </div>
                       </div>
                     </div>
@@ -333,7 +350,7 @@ export default function DashboardPage() {
                         file.status === 'failed' ? 'destructive' : 'outline'
                       }
                     >
-                      {file.status as string}
+                      {file.status}
                     </Badge>
                   </div>
                 ))}
